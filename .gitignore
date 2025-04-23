@@ -4,4 +4,4 @@ resources
 hugo.exe
 hugo
 .idea
-jsconfig.json
+assets/jsconfig.json

@@ -2,7 +2,8 @@
 {{- $disqusjs := .Site.Params.Comments.disqusjs -}}
 {{- if and (not $pc.Disable) (and $disqusjs.Shortname $disqusjs.ApiKey) -}}
 
-{{- $style := resources.Get "scss/partials/comments/disqusjs.scss" | resources.ToCSS | minify -}}
+{{- $options := dict "targetPath" "css/disqusjs.css" "outputStyle" "compressed" -}}
+{{- $style := resources.Get "scss/partials/comments/disqusjs.scss" | css.Sass $options -}}
 <link rel="stylesheet" href="{{ $style.RelPermalink }}">
 
 <div class="disqus-container">
