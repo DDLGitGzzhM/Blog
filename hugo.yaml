@@ -66,7 +66,7 @@ params:
             default: Licensed under CC BY-NC-SA 4.0
 
     comments:
-        enabled: false
+        enabled: true
         provider: disqus
 
         disqusjs:
@@ -77,9 +77,9 @@ params:
             adminLabel:
 
         utterances:
-            repo:
+            repo: DDLGitGzzhM/ddlgitgzzhm.github.io
             issueTerm: pathname
-            label:
+            label: comments
 
         beaudar:
             repo:
