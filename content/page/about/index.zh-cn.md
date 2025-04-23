@@ -7,4 +7,4 @@ menu:
             icon: user
 ---
 
-This is a test page for i18n support.
+一岁一枯荣，大家好，我是学习时长两年半的说唱练习生
