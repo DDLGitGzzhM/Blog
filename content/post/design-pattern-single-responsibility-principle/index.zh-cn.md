@@ -3,7 +3,7 @@ title: "[设计模式] SRP 单一职责原则"
 description:  srp 单一职责原则 从入门到进阶 
 date: 2025-04-24
 slug: srp
-image: luca-bravo-alS7ewQ41M8-unsplash.jpg
+image: srp.png
 categories:
     - design-pattern
 ---
