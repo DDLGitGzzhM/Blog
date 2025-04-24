@@ -25,3 +25,21 @@ SELECT * FROM user_profile
 SELECT id,device_id,gender,age,university,province FROM user_profile;
 ````
 [牛客网题目链接](https://www.nowcoder.com/practice/f9f82607cac44099a77154a80266234a?tpId=199&tqId=1971219&sourceUrl=%2Fexam%2Foj%3FquestionJobId%3D10%26subTabName%3Donline_coding_page)
+
+# 2. 查询结果去重
+
+1. select distinct  只用于列的去重
+2. select group by 可以用于一些聚合操作 如 count , avg
+````sql
+select distinct university from user_profile 
+select unviersity from user_profile group by  unviersity
+````
+
+从性能上看
+1. distinct 和 group by 没什么区别, 在只需要去重的场景 distinct 性能可能略好于 group by, 效率取决于 `DISTINCT`
+
+从业务上看
+1. 如果我们想要使用聚合函数, 如计算分组内的平均数 和 总数 那么必须使用 distinct
+
+[牛客网题目链接](https://www.nowcoder.com/practice/82ebd89f12cf48efba0fecb392e193dd?tpId=199&tqId=1971234&sourceUrl=%2Fexam%2Foj%3FquestionJobId%3D10%26subTabName%3Donline_coding_page)
+
