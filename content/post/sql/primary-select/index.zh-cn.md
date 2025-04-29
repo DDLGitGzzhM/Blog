@@ -2,7 +2,7 @@
 title: "[SQL] 基础查询"
 description: 牛客网刷 sql day 1
 date: 2025-04-24
-slug: sql
+slug: primary-select
 image: sql.png
 categories:
     - sql
