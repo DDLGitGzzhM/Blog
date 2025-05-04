@@ -6,6 +6,9 @@ slug: binance-staking-activity
 image: img.png
 categories:
     - Test
+tags: [
+  "binance-打新",
+]
 ---
 1. 目前积分是 55 分
 2. 没想到短短 4 日，积分要求就从 45 飞到 80 ，整整长了 35 分
