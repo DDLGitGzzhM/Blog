@@ -65,6 +65,7 @@ https://vjudge.net/problem/HDU-1001
 1. `lcm(A,B) = A * B / gcd(A,B)`
 2. 优化一下 `= A / gcd(A,B) * B`
 3. 问题引导为 `如何求最大公约数`
+   ![img.png](img.png)
 
 [Acwing-最小公倍数](https://www.acwing.com/file_system/file/content/whole/index/content/4337/)
 
@@ -101,7 +102,7 @@ func main() {
     }
 }
 ````
-
+---
 ````cpp
 #include <iostream> 
 using namespace std ;
@@ -130,4 +131,3 @@ int main() {
     }
 }
 ````
-![img.png](img.png)
