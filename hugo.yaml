@@ -2,7 +2,7 @@ baseurl: https://ddlgitgzzhm.github.io/
 languageCode: en-us
 theme: hugo-theme-stack
 pagination:
-    pagerSize: 3
+    pagerSize: 6
 title: Example Site
 copyright: GzzhM
 
