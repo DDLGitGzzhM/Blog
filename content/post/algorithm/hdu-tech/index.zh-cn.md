@@ -103,7 +103,7 @@ func main() {
 }
 ````
 ---
-````cpp
+````cgo
 #include <iostream> 
 using namespace std ;
 int gcd(int a,int b)  {
@@ -131,3 +131,57 @@ int main() {
     }
 }
 ````
+## 循环节 - N * N 的个位数
+
+> Given a positive integer N, you should output the most right digit of N^N.
+>
+>Input
+>
+>The input contains several test cases. The first line of the input is a single integer T which is the number of test cases.
+> 
+>T test cases follow.
+>
+>Each test case contains a single positive integer N(1<=N<=1,000,000,000).
+>
+>Output
+>
+>For each test case, you should output the rightmost digit of N^N.
+
+时间范围 :  `T * N` 必然做法是 `T * O(K)` 的
+
+`2,4,8,16,32,64,128 ...`
+`3,9,27,81,243 ... `
+
+1. 显然，奇数 * 奇数 = 奇数 ， 偶数 * 偶数 = 偶数 。 个位上的偶数 也就  `(0,2,4,6,8)` , 奇数 `(1,3,5,7,9)` 所以肯定是一个循环, 
+2. 因此我们只需要枚举出前`5`个,找出不重复的循环节即可解出这道题
+
+````cgo
+#include <iostream> 
+#include <math.h>
+using namespace std;
+int main() {
+    int t;cin>>t;
+    while(t -- ) {
+        int n ; cin >> n; 
+        int st[10] = {0};
+        
+        int last = n % 10 ;
+        int ans[6] = {0} ;
+        int idx = 0 ;
+        
+        for(int i = 0 ; i < 5 ; i++ ) {
+            int k = int(pow(last, i + 1)) % 10; 
+            if(st[k]){
+                break ; 
+            }
+            ans[++idx] = k ; 
+            st[k] = 1 ; 
+        }
+        ans[0] = ans[idx] ; 
+        cout<<ans[(n%(idx)) ] <<endl; 
+        idx = 0 ;
+    }
+    return 0; 
+}
+````
+[题目链接](http://vjudge.net/problem/HDU-1061)
