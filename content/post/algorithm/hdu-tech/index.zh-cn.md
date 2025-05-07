@@ -11,9 +11,9 @@ tags: [
 ]
 ---
 
-# 引导问题
+## 引导问题
 
-## 整数求和
+### 整数求和
 
 ````
 Hey, welcome to HDOJ(Hangzhou Dianzi University Online Judge).
@@ -36,8 +36,8 @@ For each case, output SUM(n) in one line, followed by a blank line. You may assu
 
 https://vjudge.net/problem/HDU-1001
 
-# 例题
-## 最小公倍数
+## 例题
+### 最小公倍数
 ````
 输入两个整数 a 和 b，请你编写一个函数，int lcm(int a, int b)，计算并输出 a 和 b 的最小公倍数。
 
@@ -69,7 +69,7 @@ https://vjudge.net/problem/HDU-1001
 
 [Acwing-最小公倍数](https://www.acwing.com/file_system/file/content/whole/index/content/4337/)
 
-## 最大公约数
+### 最大公约数
 1. 我们现在要求 10, 14 的最大公约数 。 
 2. 我们假设 `X` 为这两个数的最大公约数，可以知道，对于 `(14%10)` 的余数，也应该是 `X` 的倍数
 3. 从而我们可以依次类推 `(10,14) , (10,4) , (2,4), (2,0)` 则 `2` 就是最大公约数
@@ -131,7 +131,7 @@ int main() {
     }
 }
 ````
-## 循环节 - N * N 的个位数
+### 循环节 - N * N 的个位数
 
 > Given a positive integer N, you should output the most right digit of N^N.
 >

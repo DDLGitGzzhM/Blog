@@ -7,8 +7,8 @@ image: sql.png
 categories:
     - sql
 ---
-# 计算函数
-##  查找GPA最高值
+## 计算函数
+###  查找GPA最高值
 
 > 题目：运营想要知道复旦大学学生gpa最高值是多少，请你取出相应数据
 
@@ -25,7 +25,7 @@ ORDER BY gpa DESC
 LIMIT 1
 ````
 
-## 计算男生人数以及平均GPA
+### 计算男生人数以及平均GPA
 
 > 题目：现在运营想要看一下男性用户有多少人以及他们的平均gpa是多少，用以辅助设计相关活动，请你取出相应数据。
 1. 这里可以使用 `count(*)` 代替 `count(gender)`
@@ -33,8 +33,8 @@ LIMIT 1
 ````sql
 select count(gender) as male_num ,avg(gpa) as avg_gpa  from user_profile where gender = 'male' 
 ````
-# 分组函数 
-## 分组计算练习题
+## 分组函数 
+### 分组计算练习题
 > 题目：现在运营想要对每个学校不同性别的用户活跃情况和发帖数量进行分析，请分别计算出每个学校每种性别的用户数、30天内平均活跃天数和平均发帖数量。
 >
 >用户信息表：user_profile
@@ -56,7 +56,7 @@ from user_profile
 group by gender, university order by gender asc, university asc
 ````
 
-## 分组过滤练习题
+### 分组过滤练习题
 
 > 题目：现在运营想查看每个学校用户的平均发贴和回帖情况，寻找低活跃度学校进行重点运营，请取出平均发贴数低于5的学校或平均回帖数小于20的学校。
 
@@ -98,7 +98,7 @@ HAVING
     avg_answer_cnt<20
 ````
 
-## 分组排序练习题
+### 分组排序练习题
 
 > 现在运营想要查看不同大学的用户平均发帖情况，并期望结果按照平均发帖情况进行升序排列，请你取出相应数据
 1. 这里和 `where`不同，竟然不需要子查询和更换其他 关键字。 聚合函数可以直接进行排序

@@ -8,7 +8,7 @@ categories:
     - sql
 ---
 
-# 1. 查询所有列
+## 查询所有列
 
 两种做法,一种是 *, 另外一种是全量的显示所有的列。 本质上这两个没什么区别
 
@@ -26,7 +26,7 @@ SELECT id,device_id,gender,age,university,province FROM user_profile;
 ````
 [牛客网题目链接](https://www.nowcoder.com/practice/f9f82607cac44099a77154a80266234a?tpId=199&tqId=1971219&sourceUrl=%2Fexam%2Foj%3FquestionJobId%3D10%26subTabName%3Donline_coding_page)
 
-# 2. 查询结果去重
+## 查询结果去重
 
 1. select distinct  只用于列的去重
 2. select group by 可以用于一些聚合操作 如 count , avg
