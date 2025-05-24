@@ -3,7 +3,7 @@ title: "[SQL] 必要函数 2"
 description: 牛客网刷 sql day 5
 date: 2025-05-23
 slug: necessary-select-2
-image: sql.png
+image: title.png
 categories:
     - sql
 ---
@@ -63,4 +63,39 @@ GROUP BY gender;
 ````
 [题目链接](https://www.nowcoder.com/practice/f04189f92f8d4f6fa0f383d413af7cb8?tpId=199&tqId=1975682&sourceUrl=%2Fexam%2Foj)
 
-## Todo 待完善
+[送分题](https://www.nowcoder.com/practice/26c8715f32e24d918f15db69518f3ad8?tpId=199&tqId=1975683&sourceUrl=%2Fexam%2Foj)
+
+````sql
+select 
+device_id, 
+SUBSTRING_INDEX(blog_url, '/',-1) as user_name 
+from 
+user_submit
+````
+
+## 截取年龄
+> 题目：现在运营举办了一场比赛，收到了一些参赛申请，表数据记录形式如下所示，现在运营想要统计每个年龄的用户分别有多少参赛者，请取出相应结果
+>
+> 示例：user_submit
+>
+> | device_id | profile           | blog_url            |  
+> |-----------|-------------------|---------------------|  
+> | 2138      | 180cm,75kg,27,male | http:/ur/bigboy777 |  
+>
+> 根据示例，你的查询应返回以下结果：
+>
+> | age | number |  
+> |-----|--------|  
+> | 27  | 1      |  
+> | 25  | 1      |  
+> | ... | ...    |  
+
+1. 两段 substring_index 
+
+````sql
+select 
+SUBSTRING_INDEX( SUBSTRING_INDEX(profile, ',', -2),',', 1) as age ,
+count(*) as number 
+from user_submit 
+group by age
+````
