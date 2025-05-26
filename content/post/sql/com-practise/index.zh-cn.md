@@ -185,4 +185,12 @@ ORDER BY
 ````
 [牛客题目链接](https://www.nowcoder.com/practice/d8a4f7b1ded04948b5435a45f03ead8c?tpId=199&tqId=1980674&sourceUrl=%2Fexam%2Foj)
 
-### TODO 其他题目
+###  21年8月份练题总数
+
+1. 送分题 不做解释 
+````sql
+select count(distinct device_id) as did_cnt , count(question_id) as question_cnt 
+from question_practice_detail
+where year(date) = 2021 and  month(date) = 8
+````
+[牛客题目链接](https://www.nowcoder.com/practice/b8f30b239b454ed490367b53ea95607d?tpId=199&tqId=2002640&sourceUrl=%2Fexam%2Foj)
