@@ -6,6 +6,7 @@ slug: leetcode-560
 image: img.png
 categories:
     - algorithm
+    - time-line
 tags: [
   "leetcode-hot100",
 ]

@@ -6,6 +6,7 @@ slug: binance-staking-activity-1
 image: img.png
 categories:
     - Test
+    - time-line
 tags: [
    "binance-打新",
 ]

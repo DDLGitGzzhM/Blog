@@ -6,6 +6,7 @@ slug: primary-select
 image: sql.png
 categories:
     - sql
+    - time-line
 ---
 
 ## 查询所有列

@@ -6,6 +6,7 @@ slug: com-practise-1
 image: title.png
 categories:
     - sql
+    - time-line
 ---
 
 ## 练习

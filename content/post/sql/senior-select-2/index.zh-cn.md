@@ -6,6 +6,7 @@ slug: senior-select-2
 image: sql.png
 categories:
     - sql
+    - time-line
 ---
 ## 计算函数
 ###  查找GPA最高值

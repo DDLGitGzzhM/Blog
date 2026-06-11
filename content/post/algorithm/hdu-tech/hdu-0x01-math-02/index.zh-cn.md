@@ -6,6 +6,7 @@ slug: hdu-0x01-math-02
 image: icpc-title.png
 categories:
     - algorithm
+    - time-line
 tags: [
   "hdu-icpc",
 ]

@@ -6,6 +6,7 @@ slug: necessary-select-2
 image: title.png
 categories:
     - sql
+    - time-line
 ---
 
 ## 文本函数

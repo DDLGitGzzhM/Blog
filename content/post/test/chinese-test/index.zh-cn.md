@@ -6,6 +6,7 @@ slug: test-chinese
 image: helena-hertz-wWZzXlDpMog-unsplash.jpg
 categories:
     - Test
+    - time-line
 ---
 
 ## 正文测试

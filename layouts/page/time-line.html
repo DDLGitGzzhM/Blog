@@ -1,0 +1,52 @@
+{{ define "body-class" }}page-time-line{{ end }}
+
+{{ define "main" }}
+    {{- $category := site.GetPage "/categories/time-line" -}}
+    {{- $posts := slice -}}
+    {{- if $category -}}
+        {{- $posts = $category.RegularPages -}}
+    {{- end -}}
+
+    {{- $currentYear := now.Year -}}
+
+    <header class="time-line-header">
+        <div class="time-line-header-row">
+            <div class="time-line-header-text">
+                <h1 class="section-title">{{ .Title }}</h1>
+                <p class="time-line-subtitle">三根绳索对应所选年份的前两年、前一年与所选年份 · 每次展示 3 日</p>
+            </div>
+            <div class="time-line-year-switch">
+                <label for="time-line-year">当前年份</label>
+                <select id="time-line-year" aria-label="切换当前年份">
+                    {{- range $i := seq 0 9 -}}
+                        {{- $year := sub $currentYear $i -}}
+                        <option value="{{ $year }}" {{ if eq $year $currentYear }}selected{{ end }}>{{ $year }}</option>
+                    {{- end -}}
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <div
+        class="time-line-page"
+        id="time-line-page"
+        data-reference-date="{{ now.Format "2006-01-02" }}"
+        data-current-year="{{ $currentYear }}"
+    >
+        <script type="application/json" id="time-line-posts">[
+            {{- range $index, $post := $posts -}}
+                {{- if $index }},{{ end -}}
+                {{- dict
+                    "title" $post.Title
+                    "permalink" $post.RelPermalink
+                    "date" ($post.Date.Format "2006-01-02")
+                    "summary" (plainify $post.Summary)
+                | jsonify -}}
+            {{- end -}}
+        ]</script>
+
+        <div class="time-line-rope-grid" id="time-line-grid" aria-live="polite"></div>
+        <div class="time-line-sentinel" id="time-line-sentinel" aria-hidden="true"></div>
+        <p class="time-line-end" id="time-line-end" hidden>已展示全部日期</p>
+    </div>
+{{ end }}

@@ -6,6 +6,7 @@ slug: necessary-select-1
 image: sql.png
 categories:
     - sql
+    - time-line
 ---
 
 ## 条件函数

@@ -6,6 +6,7 @@ slug: senior-select-1
 image: sql.png
 categories:
     - sql
+    - time-line
 ---
 ## 高级操作符练习 1
 > 题目：现在运营想要找到male且GPA在3.5以上(不包括3.5)的用户进行调研，请你取出相关数据。
