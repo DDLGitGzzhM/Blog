@@ -374,6 +374,9 @@ const initTimeline = (): void => {
     view.init();
 };
 
+import { initRoadmap } from "./roadmap";
+
 window.addEventListener("load", () => {
     initTimeline();
+    initRoadmap();
 });

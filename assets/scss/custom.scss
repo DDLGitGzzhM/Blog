@@ -283,3 +283,260 @@ body.page-time-line {
         }
     }
 }
+
+body.page-roadmap {
+    .main-container {
+        align-items: stretch;
+        min-height: 100vh;
+    }
+
+    main.main {
+        gap: 0;
+        min-height: 100vh;
+        padding-bottom: 0;
+    }
+}
+
+.page-roadmap {
+    --roadmap-accent: rgba(90, 160, 255, 0.85);
+    --roadmap-done: rgba(72, 187, 120, 0.9);
+    --roadmap-checkbox-size: 16px;
+
+    .roadmap-header {
+        margin-bottom: 0.8rem;
+    }
+
+    .roadmap-header-row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1.2rem;
+    }
+
+    .roadmap-header-text {
+        min-width: 0;
+        flex: 1;
+
+        .section-title {
+            margin-bottom: 0.2rem;
+        }
+    }
+
+    .roadmap-subtitle {
+        margin: 0;
+        color: var(--card-text-color-secondary);
+        font-size: 1.3rem;
+    }
+
+    .roadmap-progress-wrap {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 0.6rem;
+    }
+
+    .roadmap-progress-bar {
+        flex: 1;
+        max-width: 28rem;
+        height: 0.8rem;
+        border-radius: 999px;
+        background: rgba(var(--body-text-color), 0.08);
+        overflow: hidden;
+    }
+
+    .roadmap-progress-fill {
+        height: 100%;
+        width: 0;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--roadmap-accent), var(--roadmap-done));
+        transition: width 0.25s ease;
+    }
+
+    .roadmap-progress-text {
+        font-size: 1.3rem;
+        color: var(--card-text-color-secondary);
+        white-space: nowrap;
+    }
+
+    .roadmap-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        flex-shrink: 0;
+    }
+
+    .roadmap-switch {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+
+        label {
+            font-size: 1.3rem;
+            color: var(--card-text-color-secondary);
+        }
+
+        select {
+            min-width: 12rem;
+            padding: 0.45rem 0.8rem;
+            border: 1px solid rgba(var(--body-text-color), 0.12);
+            border-radius: var(--card-border-radius);
+            background: var(--card-background);
+            color: var(--card-text-color-main);
+            font-size: 1.3rem;
+            cursor: pointer;
+        }
+    }
+
+    .roadmap-export-btn,
+    .roadmap-toolbar-btn {
+        padding: 0.45rem 0.9rem;
+        border: 1px solid rgba(var(--body-text-color), 0.12);
+        border-radius: var(--card-border-radius);
+        background: var(--card-background);
+        color: var(--card-text-color-main);
+        font-size: 1.3rem;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .roadmap-export-btn:hover,
+    .roadmap-toolbar-btn:hover {
+        border-color: var(--roadmap-accent);
+    }
+
+    .roadmap-page {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: calc(100vh - 9rem);
+    }
+
+    .roadmap-mindmap-panel {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: calc(100vh - 11rem);
+        border-radius: calc(var(--card-border-radius) * 1.5);
+        border: 1px solid rgba(var(--body-text-color), 0.08);
+        background: var(--card-background);
+        box-shadow: var(--shadow-l1);
+        overflow: hidden;
+    }
+
+    .roadmap-mindmap-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.6rem;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid rgba(var(--body-text-color), 0.08);
+        flex-shrink: 0;
+    }
+
+    .roadmap-mindmap-viewport {
+        position: relative;
+        flex: 1;
+        min-height: calc(100vh - 14rem);
+        background:
+            radial-gradient(circle at top left, rgba(90, 160, 255, 0.08), transparent 42%),
+            var(--card-background);
+    }
+
+    .roadmap-mindmap-svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: calc(100vh - 14rem);
+
+        &.markmap {
+            --markmap-text-color: var(--card-text-color-main);
+            --markmap-circle-open-bg: var(--card-background);
+            --markmap-code-bg: rgba(var(--body-text-color), 0.08);
+            --markmap-code-color: var(--card-text-color-main);
+            --markmap-highlight-bg: rgba(90, 160, 255, 0.2);
+            color: var(--card-text-color-main);
+        }
+    }
+
+    g.markmap-node foreignObject.markmap-foreign div {
+        color: var(--card-text-color-main);
+    }
+
+    .roadmap-checkbox-fo {
+        overflow: visible;
+        pointer-events: all;
+    }
+
+    .roadmap-checkbox-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    .roadmap-checkbox-input {
+        width: var(--roadmap-checkbox-size);
+        height: var(--roadmap-checkbox-size);
+        margin: 0;
+        cursor: pointer;
+        accent-color: var(--roadmap-done);
+        background-color: #fff;
+        border: 2px solid rgba(var(--body-text-color), 0.75);
+        border-radius: 3px;
+        box-shadow: 0 0 0 1px rgba(var(--body-text-color), 0.08);
+    }
+
+    g.markmap-node.is-done foreignObject:not(.roadmap-checkbox-fo) div {
+        opacity: 0.55;
+        text-decoration: line-through;
+    }
+
+    g.markmap-node.is-done > circle {
+        fill: var(--roadmap-done);
+    }
+
+    g.markmap-node.roadmap-document-root > circle {
+        fill: rgba(var(--body-text-color), 0.25);
+    }
+
+    @media (max-width: 860px) {
+        .roadmap-header-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .roadmap-controls {
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .roadmap-page,
+        .roadmap-mindmap-panel,
+        .roadmap-mindmap-viewport,
+        .roadmap-mindmap-svg {
+            min-height: calc(100vh - 13rem);
+        }
+    }
+}
+
+[data-scheme="dark"] .page-roadmap {
+    .roadmap-mindmap-svg.markmap {
+        --markmap-text-color: rgba(255, 255, 255, 0.9);
+        --markmap-code-bg: rgba(255, 255, 255, 0.1);
+        --markmap-code-color: rgba(255, 255, 255, 0.85);
+        --markmap-highlight-bg: rgba(90, 160, 255, 0.28);
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    g.markmap-node foreignObject.markmap-foreign div {
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .roadmap-checkbox-input {
+        background-color: #2b2b2b;
+        border-color: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+}

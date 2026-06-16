@@ -1,0 +1,64 @@
+{{ define "body-class" }}page-roadmap{{ end }}
+
+{{ define "main" }}
+    {{- $roadmaps := slice -}}
+    {{- range site.Data.roadmaps -}}
+        {{- $item := . -}}
+        {{- with resources.Get (printf "roadmaps/%s" $item.file) -}}
+            {{- $roadmaps = $roadmaps | append (dict "id" $item.id "title" $item.title "content" .Content) -}}
+        {{- end -}}
+    {{- end -}}
+
+    <header class="roadmap-header">
+        <div class="roadmap-header-row">
+            <div class="roadmap-header-text">
+                <h1 class="section-title">{{ .Title }}</h1>
+                <p class="roadmap-subtitle">
+                    在思维导图上直接勾选完成项，支持导出 XMind
+                </p>
+                <div class="roadmap-progress-wrap" id="roadmap-progress-wrap" hidden>
+                    <div class="roadmap-progress-bar" aria-hidden="true">
+                        <div class="roadmap-progress-fill" id="roadmap-progress-fill"></div>
+                    </div>
+                    <span class="roadmap-progress-text" id="roadmap-progress-text">0%</span>
+                </div>
+            </div>
+            <div class="roadmap-controls">
+                <div class="roadmap-switch">
+                    <label for="roadmap-select">路线图</label>
+                    <select id="roadmap-select" aria-label="切换路线图">
+                        {{- range $index, $item := $roadmaps -}}
+                            <option value="{{ $item.id }}" {{ if eq $index 0 }}selected{{ end }}>
+                                {{ $item.title }}
+                            </option>
+                        {{- end -}}
+                    </select>
+                </div>
+                <button type="button" class="roadmap-export-btn" id="roadmap-export-xmind">
+                    导出 XMind
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="roadmap-page" id="roadmap-page">
+        <script type="application/json" id="roadmap-data">[
+            {{- range $index, $item := $roadmaps -}}
+                {{- if $index }},{{ end -}}
+                {{- dict "id" $item.id "title" $item.title "content" $item.content | jsonify -}}
+            {{- end -}}
+        ]</script>
+
+        <section class="roadmap-mindmap-panel" id="roadmap-mindmap-panel">
+            <div class="roadmap-mindmap-toolbar" id="roadmap-mindmap-toolbar"></div>
+            <div class="roadmap-mindmap-viewport">
+                <svg class="roadmap-mindmap-svg" id="roadmap-mindmap-svg"></svg>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.18.12" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.18.12/dist/browser/index.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" crossorigin="anonymous"></script>
+{{ end }}
