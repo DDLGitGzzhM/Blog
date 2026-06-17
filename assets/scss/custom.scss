@@ -476,6 +476,11 @@ body.page-roadmap {
         }
     }
 
+    g.markmap-node foreignObject.markmap-foreign {
+        pointer-events: auto;
+        overflow: visible;
+    }
+
     g.markmap-node foreignObject.markmap-foreign div {
         color: var(--card-text-color-main);
     }
@@ -486,6 +491,7 @@ body.page-roadmap {
         margin-right: 6px;
         margin-top: 2px;
         line-height: 1;
+        pointer-events: auto;
     }
 
     .roadmap-checkbox-input {
@@ -493,6 +499,7 @@ body.page-roadmap {
         height: var(--roadmap-checkbox-size);
         margin: 0;
         cursor: pointer;
+        pointer-events: auto;
         accent-color: var(--roadmap-done);
         background-color: #fff;
         border: 2px solid rgba(var(--body-text-color), 0.75);

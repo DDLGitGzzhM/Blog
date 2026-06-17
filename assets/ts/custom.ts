@@ -5,9 +5,10 @@ interface TimelinePost {
     summary: string;
 }
 
-const DAYS_PER_BATCH = 3;
+const DAYS_PER_BATCH = 10;
 const MAX_DAYS_BACK = 366;
 const SCROLL_LOAD_OFFSET = 240;
+const TIMELINE_VIEWPORT_PADDING = 32;
 
 const parseDate = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split("-").map(Number);
@@ -228,7 +229,7 @@ class TimelineView {
 
     init(): void {
         this.buildRopes();
-        this.loadNextBatch(true);
+        this.loadInitialContent();
         this.yearSelect.addEventListener("change", () => this.onYearChange());
         window.addEventListener("scroll", () => this.onScroll(), {
             passive: true,
@@ -236,6 +237,45 @@ class TimelineView {
         window.setTimeout(() => {
             this.scrollReady = true;
         }, 300);
+    }
+
+    private getTimelineContentHeight(): number {
+        const lists = Array.from(
+            this.grid.querySelectorAll<HTMLElement>(".time-line-day-list")
+        );
+        if (lists.length === 0) {
+            return 0;
+        }
+        return Math.max(...lists.map((list) => list.scrollHeight));
+    }
+
+    private getVisibleTimelineBudget(): number {
+        const gridRect = this.grid.getBoundingClientRect();
+        return Math.max(
+            0,
+            window.innerHeight - gridRect.top - TIMELINE_VIEWPORT_PADDING
+        );
+    }
+
+    private timelineContentFillsViewport(): boolean {
+        const budget = this.getVisibleTimelineBudget();
+        if (budget <= 0) {
+            return false;
+        }
+        return this.getTimelineContentHeight() >= budget;
+    }
+
+    private loadInitialContent(): void {
+        while (this.hasMore) {
+            const heightBefore = this.getTimelineContentHeight();
+            this.loadNextBatch(true);
+            if (!this.hasMore || this.timelineContentFillsViewport()) {
+                break;
+            }
+            if (this.getTimelineContentHeight() <= heightBefore) {
+                break;
+            }
+        }
     }
 
     private getRopeYears(): number[] {
@@ -270,7 +310,7 @@ class TimelineView {
             this.endHint.hidden = true;
         }
         this.buildRopes();
-        this.loadNextBatch(true);
+        this.loadInitialContent();
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
 

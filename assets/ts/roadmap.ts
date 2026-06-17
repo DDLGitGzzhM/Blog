@@ -431,33 +431,40 @@ const normalizeNodeTitle = (value: string): string => {
 
 const bindRoadmapIds = (
     markmapNode: MarkmapDataNode,
-    roadmapNode: RoadmapNode | null
+    roadmapRoot: RoadmapNode | null
 ): void => {
-    if (roadmapNode) {
-        markmapNode.payload = {
-            ...(markmapNode.payload || {}),
-            roadmapId: roadmapNode.id,
-        };
+    if (!roadmapRoot) {
+        return;
     }
 
-    const markmapChildren = markmapNode.children || [];
-    const roadmapChildren = roadmapNode?.children || [];
+    const titleQueues = new Map<string, RoadmapNode[]>();
+    const collectRoadmapNodes = (node: RoadmapNode): void => {
+        const key = normalizeNodeTitle(node.title);
+        const list = titleQueues.get(key) || [];
+        list.push(node);
+        titleQueues.set(key, list);
+        node.children.forEach(collectRoadmapNodes);
+    };
+    collectRoadmapNodes(roadmapRoot);
 
-    markmapChildren.forEach((markmapChild, index) => {
-        const markmapTitle = normalizeNodeTitle(markmapChild.content);
-        let roadmapChild = roadmapChildren[index] ?? null;
-        if (
-            !roadmapChild ||
-            normalizeNodeTitle(roadmapChild.title) !== markmapTitle
-        ) {
-            roadmapChild =
-                roadmapChildren.find(
-                    (child) =>
-                        normalizeNodeTitle(child.title) === markmapTitle
-                ) ?? null;
+    const queueIndex = new Map<string, number>();
+    const walkMarkmap = (node: MarkmapDataNode): void => {
+        const title = normalizeNodeTitle(node.content);
+        if (title) {
+            const list = titleQueues.get(title) || [];
+            const index = queueIndex.get(title) || 0;
+            const matched = list[index];
+            if (matched) {
+                node.payload = {
+                    ...(node.payload || {}),
+                    roadmapId: matched.id,
+                };
+                queueIndex.set(title, index + 1);
+            }
         }
-        bindRoadmapIds(markmapChild, roadmapChild);
-    });
+        (node.children || []).forEach(walkMarkmap);
+    };
+    walkMarkmap(markmapNode);
 };
 
 const getStorageKey = (roadmapId: string): string =>
@@ -797,7 +804,7 @@ class RoadmapView {
 
         if (!markmap._initializeData || !markmap.renderData) {
             await markmap.setData(newRoot);
-            this.attachMindmapInteractions();
+            this.scheduleAttachMindmapInteractions();
             return;
         }
 
@@ -816,7 +823,7 @@ class RoadmapView {
         }
 
         window.requestAnimationFrame(() => {
-            this.attachMindmapInteractions();
+            this.scheduleAttachMindmapInteractions();
             if (this.selectedNodeId) {
                 this.selectNode(this.selectedNodeId);
             }
@@ -931,6 +938,7 @@ class RoadmapView {
 
     private bindEvents(): void {
         this.select.addEventListener("change", () => {
+            this.persistCurrentView();
             void this.loadRoadmap(this.select.value);
         });
         this.exportBtn.addEventListener("click", () => void this.exportXMind());
@@ -964,6 +972,7 @@ class RoadmapView {
         this.markmapInstance = null;
         this.documentRootDom = null;
         this.nodeElements.clear();
+        this.viewPersistenceReady = false;
     }
 
     private patchMarkmapInstance(): void {
@@ -977,7 +986,7 @@ class RoadmapView {
         const originalToggle = markmap.toggleNode.bind(markmap);
         markmap.toggleNode = async (data, recursive) => {
             await originalToggle(data, recursive);
-            this.attachMindmapInteractions();
+            this.scheduleAttachMindmapInteractions();
         };
         markmap._roadmapPatched = true;
     }
@@ -1061,16 +1070,12 @@ class RoadmapView {
             return;
         }
 
-        const isRoadmapSwitch =
-            this.lastRenderedRoadmapId !== "" &&
-            this.lastRenderedRoadmapId !== roadmapId;
+        const isSameRoadmap = this.lastRenderedRoadmapId === roadmapId;
         const liveView =
-            !isRoadmapSwitch &&
-            this.markmapInstance &&
-            this.lastRenderedRoadmapId === roadmapId
+            isSameRoadmap && this.markmapInstance
                 ? this.readZoomTransform()
                 : null;
-        const savedView = isRoadmapSwitch ? null : loadSavedView(roadmapId);
+        const savedView = loadSavedView(roadmapId);
         const viewToRestore = liveView ?? savedView;
         const shouldFit = viewToRestore === null;
 
@@ -1110,7 +1115,7 @@ class RoadmapView {
                 this.applySavedView(viewToRestore);
             }
             this.lastRenderedRoadmapId = roadmapId;
-            this.attachMindmapInteractions();
+            this.scheduleAttachMindmapInteractions();
             afterRender?.();
         };
 
@@ -1233,7 +1238,8 @@ class RoadmapView {
         if (!outer) {
             return null;
         }
-        return outer.querySelector(":scope > div");
+        const inner = outer.querySelector(":scope > div");
+        return (inner ?? outer) as HTMLDivElement;
     }
 
     private removeNodeCheckbox(element: SVGGElement): void {
@@ -1524,6 +1530,17 @@ class RoadmapView {
         return true;
     }
 
+    private scheduleAttachMindmapInteractions(): void {
+        const attach = (): void => {
+            this.attachMindmapInteractions();
+        };
+        attach();
+        window.requestAnimationFrame(() => {
+            attach();
+            window.setTimeout(attach, 120);
+        });
+    }
+
     private attachMindmapInteractions(): void {
         this.nodeElements.clear();
         this.documentRootDom = null;
@@ -1537,9 +1554,10 @@ class RoadmapView {
         const unmatchedDom: SVGGElement[] = [];
 
         domNodes.forEach((element) => {
-            const datum = (element as SVGGElement & { __data__?: MarkmapDataNode })
-                .__data__;
-            const roadmapId = datum?.payload?.roadmapId;
+            const roadmapId =
+                element.dataset.roadmapId ||
+                (element as SVGGElement & { __data__?: MarkmapDataNode })
+                    .__data__?.payload?.roadmapId;
             if (
                 typeof roadmapId === "string" &&
                 this.bindDomNodeByRoadmapId(element, roadmapId)
@@ -1581,7 +1599,12 @@ class RoadmapView {
         wrapper.appendChild(input);
         contentDiv.insertBefore(wrapper, contentDiv.firstChild);
 
-        input.addEventListener("click", (event) => {
+        const stopBubble = (event: Event): void => {
+            event.stopPropagation();
+        };
+        input.addEventListener("mousedown", stopBubble);
+        input.addEventListener("click", stopBubble);
+        input.addEventListener("change", (event) => {
             event.stopPropagation();
             this.setChecked(nodeId, input.checked, false);
         });
