@@ -44,7 +44,7 @@
         </div>
     </header>
 
-    <div class="roadmap-page" id="roadmap-page" data-roadmap-api="http://127.0.0.1:8787">
+    <div class="roadmap-page" id="roadmap-page"{{ if hugo.IsServer }} data-roadmap-api="http://127.0.0.1:8787"{{ end }}>
         <script type="application/json" id="roadmap-data">[
             {{- range $index, $item := $roadmaps -}}
                 {{- if $index }},{{ end -}}

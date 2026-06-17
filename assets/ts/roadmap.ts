@@ -362,11 +362,22 @@ const addChildNode = (
     return child;
 };
 
+const isLocalDevHost = (): boolean => {
+    const host = window.location.hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+};
+
 const checkEditAPIAvailable = async (apiBase: string): Promise<boolean> => {
+    if (!apiBase || !isLocalDevHost()) {
+        return false;
+    }
     try {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 1500);
         const response = await fetch(`${apiBase}/api/health`, {
-            signal: AbortSignal.timeout(1500),
+            signal: controller.signal,
         });
+        window.clearTimeout(timer);
         return response.ok;
     } catch {
         return false;
@@ -666,7 +677,7 @@ class RoadmapView {
     }
 
     private async bootstrap(): Promise<void> {
-        await this.setupEditMode();
+        void this.setupEditMode();
         await this.loadRoadmap(this.currentId);
     }
 
@@ -987,9 +998,13 @@ class RoadmapView {
             loadCSS(styles);
         }
         if (scripts) {
-            await loadJS(scripts, {
-                getMarkmap: () => window.markmap,
-            });
+            try {
+                await loadJS(scripts, {
+                    getMarkmap: () => window.markmap,
+                });
+            } catch (error) {
+                console.warn("Markmap optional assets failed to load", error);
+            }
         }
         this.assetsLoaded = true;
     }
@@ -1497,6 +1512,18 @@ class RoadmapView {
         });
     }
 
+    private bindDomNodeByRoadmapId(
+        element: SVGGElement,
+        roadmapId: string
+    ): boolean {
+        const node = findNodeById(this.currentNodes, roadmapId);
+        if (!node?.checkable) {
+            return false;
+        }
+        this.bindDomNode(element, node);
+        return true;
+    }
+
     private attachMindmapInteractions(): void {
         this.nodeElements.clear();
         this.documentRootDom = null;
@@ -1506,9 +1533,26 @@ class RoadmapView {
         );
         this.markDocumentRootDom();
 
-        const roadmapNodes = collectCheckableNodes(this.currentNodes);
         const domNodes = this.getContentDomNodes(allDomNodes);
-        this.bindDomNodesByTitle(domNodes, roadmapNodes);
+        const unmatchedDom: SVGGElement[] = [];
+
+        domNodes.forEach((element) => {
+            const datum = (element as SVGGElement & { __data__?: MarkmapDataNode })
+                .__data__;
+            const roadmapId = datum?.payload?.roadmapId;
+            if (
+                typeof roadmapId === "string" &&
+                this.bindDomNodeByRoadmapId(element, roadmapId)
+            ) {
+                return;
+            }
+            unmatchedDom.push(element);
+        });
+
+        if (unmatchedDom.length > 0) {
+            const roadmapNodes = collectCheckableNodes(this.currentNodes);
+            this.bindDomNodesByTitle(unmatchedDom, roadmapNodes);
+        }
     }
 
     private renderNodeCheckbox(
