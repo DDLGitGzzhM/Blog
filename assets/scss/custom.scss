@@ -461,19 +461,12 @@ body.page-roadmap {
         color: var(--card-text-color-main);
     }
 
-    .roadmap-checkbox-fo {
-        overflow: visible;
-        pointer-events: all;
-    }
-
-    .roadmap-checkbox-wrap {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        padding: 0;
+    g.markmap-node foreignObject.markmap-foreign .roadmap-checkbox-inline {
+        display: inline-block;
+        vertical-align: top;
+        margin-right: 6px;
+        margin-top: 2px;
+        line-height: 1;
     }
 
     .roadmap-checkbox-input {
@@ -488,9 +481,16 @@ body.page-roadmap {
         box-shadow: 0 0 0 1px rgba(var(--body-text-color), 0.08);
     }
 
-    g.markmap-node.is-done foreignObject:not(.roadmap-checkbox-fo) div {
+    g.markmap-node.is-done foreignObject.markmap-foreign > div > div {
         opacity: 0.55;
+    }
+
+    g.markmap-node.is-done foreignObject.markmap-foreign > div > div > :not(.roadmap-checkbox-inline) {
         text-decoration: line-through;
+    }
+
+    g.markmap-node > circle {
+        cursor: pointer;
     }
 
     g.markmap-node.is-done > circle {

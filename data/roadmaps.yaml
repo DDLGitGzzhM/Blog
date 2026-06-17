@@ -1,3 +1,6 @@
 - id: golang
   title: Golang 后端进阶
   file: golang.md
+- id: life-goals-5-25
+  title: 25个人生目标探索发散图
+  file: life-goals-5-25.md

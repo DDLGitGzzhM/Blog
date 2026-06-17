@@ -21,6 +21,7 @@ interface MarkmapDataNode {
 interface MarkmapInstance {
     setData: (data: unknown) => void;
     fit: () => void;
+    toggleNode?: (data: unknown, recursive?: boolean) => Promise<void>;
     zoom?: {
         transform: (
             transition: unknown,
@@ -210,6 +211,36 @@ const collectCheckableNodes = (nodes: RoadmapNode[]): RoadmapNode[] => {
     return result;
 };
 
+const findNodeById = (
+    nodes: RoadmapNode[],
+    nodeId: string
+): RoadmapNode | undefined => {
+    for (const node of nodes) {
+        if (node.id === nodeId) {
+            return node;
+        }
+        const found = findNodeById(node.children, nodeId);
+        if (found) {
+            return found;
+        }
+    }
+    return undefined;
+};
+
+const collectDescendantCheckableIds = (node: RoadmapNode): string[] => {
+    const ids: string[] = [];
+    const walk = (items: RoadmapNode[]): void => {
+        items.forEach((item) => {
+            if (item.checkable) {
+                ids.push(item.id);
+            }
+            walk(item.children);
+        });
+    };
+    walk(node.children);
+    return ids;
+};
+
 const normalizeNodeTitle = (value: string): string => {
     let text = value;
     if (text.includes("&")) {
@@ -221,11 +252,6 @@ const normalizeNodeTitle = (value: string): string => {
         .replace(CHECKED_PREFIX, "")
         .replace(/<[^>]+>/g, "")
         .trim();
-};
-
-const expandAllMarkmapNodes = (node: MarkmapDataNode): void => {
-    node.payload = { ...(node.payload || {}), fold: 0 };
-    node.children?.forEach(expandAllMarkmapNodes);
 };
 
 const bindRoadmapIds = (
@@ -423,6 +449,7 @@ class RoadmapView {
     private lastRenderedRoadmapId = "";
     private viewPersistenceReady = false;
     private viewPersistTimer = 0;
+    private loadGeneration = 0;
 
     constructor(
         roadmaps: RoadmapData[],
@@ -487,6 +514,29 @@ class RoadmapView {
         this.mindmapToolbar.append(fitBtn);
     }
 
+    private resetMarkmapInstance(): void {
+        this.mindmapSvg.replaceChildren();
+        this.markmapInstance = null;
+        this.documentRootDom = null;
+        this.nodeElements.clear();
+    }
+
+    private patchMarkmapInstance(): void {
+        const markmap = this.markmapInstance as MarkmapInstance & {
+            _roadmapPatched?: boolean;
+        };
+        if (!markmap?.toggleNode || markmap._roadmapPatched) {
+            return;
+        }
+
+        const originalToggle = markmap.toggleNode.bind(markmap);
+        markmap.toggleNode = async (data, recursive) => {
+            await originalToggle(data, recursive);
+            this.attachMindmapInteractions();
+        };
+        markmap._roadmapPatched = true;
+    }
+
     private async ensureMarkmapAssets(): Promise<void> {
         if (!window.markmap) {
             console.error("Markmap runtime is not loaded");
@@ -510,20 +560,36 @@ class RoadmapView {
         this.assetsLoaded = true;
     }
 
+    private isRenderStale(generation: number, roadmapId: string): boolean {
+        return (
+            generation !== this.loadGeneration || roadmapId !== this.currentId
+        );
+    }
+
     private async renderMindmap(
         markdown: string,
-        afterRender?: () => void
+        afterRender?: () => void,
+        generation = this.loadGeneration,
+        roadmapId = this.currentId
     ): Promise<void> {
         await this.ensureMarkmapAssets();
+        if (this.isRenderStale(generation, roadmapId)) {
+            return;
+        }
         if (!this.transformer || !window.markmap) {
             return;
         }
 
         const markmapRoot = this.prepareMarkmapRoot(markdown);
-        if (!markmapRoot) {
+        if (!markmapRoot || this.isRenderStale(generation, roadmapId)) {
             return;
         }
-        await this.renderMindmapData(markmapRoot, afterRender);
+        await this.renderMindmapData(
+            markmapRoot,
+            afterRender,
+            generation,
+            roadmapId
+        );
     }
 
     private prepareMarkmapRoot(markdown: string): MarkmapDataNode | null {
@@ -533,32 +599,35 @@ class RoadmapView {
         const { root } = this.transformer.transform(markdown);
         const markmapRoot = root as MarkmapDataNode;
         bindRoadmapIds(markmapRoot, this.currentNodes[0] ?? null);
-        expandAllMarkmapNodes(markmapRoot);
         return markmapRoot;
     }
 
     private async renderMindmapData(
         root: unknown,
-        afterRender?: () => void
+        afterRender?: () => void,
+        generation = this.loadGeneration,
+        roadmapId = this.currentId
     ): Promise<void> {
-        if (!window.markmap) {
+        if (!window.markmap || this.isRenderStale(generation, roadmapId)) {
             return;
         }
 
+        const isRoadmapSwitch =
+            this.lastRenderedRoadmapId !== "" &&
+            this.lastRenderedRoadmapId !== roadmapId;
         const liveView =
+            !isRoadmapSwitch &&
             this.markmapInstance &&
-            this.lastRenderedRoadmapId === this.currentId
+            this.lastRenderedRoadmapId === roadmapId
                 ? this.readZoomTransform()
                 : null;
-        const savedView = loadSavedView(this.currentId);
+        const savedView = isRoadmapSwitch ? null : loadSavedView(roadmapId);
         const viewToRestore = liveView ?? savedView;
         const shouldFit = viewToRestore === null;
 
-        expandAllMarkmapNodes(root as MarkmapDataNode);
-
         const markmapOptions = {
             ...window.markmap.deriveOptions({
-                initialExpandLevel: 99,
+                initialExpandLevel: -1,
             }),
             autoFit: false,
         };
@@ -570,15 +639,28 @@ class RoadmapView {
                 root
             );
             this.ensureViewPersistence();
-        } else {
+            this.patchMarkmapInstance();
+        } else if (this.lastRenderedRoadmapId === roadmapId) {
             this.markmapInstance.setData(root);
+        } else {
+            this.resetMarkmapInstance();
+            this.markmapInstance = window.markmap.Markmap.create(
+                this.mindmapSvg,
+                markmapOptions,
+                root
+            );
+            this.ensureViewPersistence();
+            this.patchMarkmapInstance();
         }
 
         const finishRender = (): void => {
+            if (this.isRenderStale(generation, roadmapId)) {
+                return;
+            }
             if (viewToRestore) {
                 this.applySavedView(viewToRestore);
             }
-            this.lastRenderedRoadmapId = this.currentId;
+            this.lastRenderedRoadmapId = roadmapId;
             this.attachMindmapInteractions();
             afterRender?.();
         };
@@ -591,8 +673,14 @@ class RoadmapView {
         }
 
         window.requestAnimationFrame(() => {
+            if (this.isRenderStale(generation, roadmapId)) {
+                return;
+            }
             this.markmapInstance?.fit();
             window.requestAnimationFrame(() => {
+                if (this.isRenderStale(generation, roadmapId)) {
+                    return;
+                }
                 this.markmapInstance?.fit();
                 window.setTimeout(finishRender, 80);
             });
@@ -688,50 +776,35 @@ class RoadmapView {
     }
 
     private getTextForeignObject(node: SVGGElement): Element | null {
-        const objects = node.querySelectorAll("foreignObject");
-        for (const fo of objects) {
-            if (!fo.classList.contains("roadmap-checkbox-fo")) {
-                return fo;
-            }
-        }
-        return null;
+        return node.querySelector("foreignObject.markmap-foreign");
     }
 
-    private getCheckboxPosition(element: SVGGElement): {
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-    } {
-        const textFo = this.getTextForeignObject(element);
-        const size = 16;
-        const gap = 6;
-
-        if (!textFo) {
-            return { x: -size - gap, y: 2, width: size, height: size };
+    private getContentDiv(foreignObject: Element): HTMLDivElement | null {
+        const outer = foreignObject.querySelector(":scope > div");
+        if (!outer) {
+            return null;
         }
-
-        const foX = Number.parseFloat(textFo.getAttribute("x") || "8");
-        const foY = Number.parseFloat(textFo.getAttribute("y") || "0");
-        const foHeight = Number.parseFloat(textFo.getAttribute("height") || "21");
-
-        return {
-            x: foX - size - gap,
-            y: foY + (foHeight - size) / 2,
-            width: size,
-            height: size,
-        };
+        return outer.querySelector(":scope > div");
     }
 
     private removeNodeCheckbox(element: SVGGElement): void {
         element
-            .querySelectorAll(".roadmap-checkbox, .roadmap-checkbox-fo")
+            .querySelectorAll(".roadmap-checkbox-inline")
             .forEach((node) => node.remove());
+        element
+            .querySelector(".roadmap-node-content-wrap")
+            ?.classList.remove("roadmap-node-content-wrap");
     }
 
     private getNodeText(element: SVGGElement): string {
-        const textDiv = this.getTextForeignObject(element)?.querySelector("div");
-        return normalizeNodeTitle(textDiv?.textContent?.trim() || "");
+        const textFo = this.getTextForeignObject(element);
+        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
+        if (!contentDiv) {
+            return "";
+        }
+        const clone = contentDiv.cloneNode(true) as HTMLDivElement;
+        clone.querySelector(".roadmap-checkbox-inline")?.remove();
+        return normalizeNodeTitle(clone.textContent?.trim() || "");
     }
 
     private getDocumentRoot(): RoadmapNode | undefined {
@@ -865,22 +938,17 @@ class RoadmapView {
         nodeId: string,
         isChecked: boolean
     ): void {
-        const svgNS = "http://www.w3.org/2000/svg";
         const xhtmlNS = "http://www.w3.org/1999/xhtml";
         this.removeNodeCheckbox(element);
 
         const textFo = this.getTextForeignObject(element);
-        const { x, y, width, height } = this.getCheckboxPosition(element);
+        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
+        if (!textFo || !contentDiv) {
+            return;
+        }
 
-        const checkboxFo = document.createElementNS(svgNS, "foreignObject");
-        checkboxFo.classList.add("roadmap-checkbox", "roadmap-checkbox-fo");
-        checkboxFo.setAttribute("x", String(x));
-        checkboxFo.setAttribute("y", String(y));
-        checkboxFo.setAttribute("width", String(width));
-        checkboxFo.setAttribute("height", String(height));
-
-        const wrapper = document.createElementNS(xhtmlNS, "div");
-        wrapper.className = "roadmap-checkbox-wrap";
+        const wrapper = document.createElementNS(xhtmlNS, "span");
+        wrapper.className = "roadmap-checkbox-inline";
 
         const input = document.createElement("input");
         input.type = "checkbox";
@@ -889,20 +957,35 @@ class RoadmapView {
         input.setAttribute("aria-label", "标记完成");
 
         wrapper.appendChild(input);
-        checkboxFo.appendChild(wrapper);
+        contentDiv.insertBefore(wrapper, contentDiv.firstChild);
 
-        input.addEventListener("pointerdown", (event) => {
-            event.stopPropagation();
-        });
         input.addEventListener("click", (event) => {
             event.stopPropagation();
             this.setChecked(nodeId, input.checked, false);
         });
+    }
 
-        if (textFo) {
-            element.insertBefore(checkboxFo, textFo);
+    private getAffectedNodeIds(nodeId: string): string[] {
+        const node = findNodeById(this.currentNodes, nodeId);
+        if (!node) {
+            return [nodeId];
+        }
+        return [nodeId, ...collectDescendantCheckableIds(node)];
+    }
+
+    private updateNodeCheckedDom(nodeId: string, isChecked: boolean): void {
+        const element = this.nodeElements.get(nodeId);
+        if (!element) {
+            return;
+        }
+        element.classList.toggle("is-done", isChecked);
+        const input = element.querySelector<HTMLInputElement>(
+            ".roadmap-checkbox-input"
+        );
+        if (input) {
+            input.checked = isChecked;
         } else {
-            element.appendChild(checkboxFo);
+            this.renderNodeCheckbox(element, nodeId, isChecked);
         }
     }
 
@@ -911,26 +994,19 @@ class RoadmapView {
         isChecked: boolean,
         rerender = true
     ): void {
-        if (isChecked) {
-            this.checked.add(nodeId);
-        } else {
-            this.checked.delete(nodeId);
-        }
+        const affectedIds = this.getAffectedNodeIds(nodeId);
+        affectedIds.forEach((id) => {
+            if (isChecked) {
+                this.checked.add(id);
+            } else {
+                this.checked.delete(id);
+            }
+        });
         saveCheckedSet(this.currentId, this.checked);
         this.updateProgress();
-
-        const element = this.nodeElements.get(nodeId);
-        if (element) {
-            element.classList.toggle("is-done", isChecked);
-            const input = element.querySelector<HTMLInputElement>(
-                ".roadmap-checkbox-input"
-            );
-            if (input) {
-                input.checked = isChecked;
-            } else {
-                this.renderNodeCheckbox(element, nodeId, isChecked);
-            }
-        }
+        affectedIds.forEach((id) => {
+            this.updateNodeCheckedDom(id, isChecked);
+        });
 
         if (!rerender) {
             return;
@@ -961,6 +1037,14 @@ class RoadmapView {
             return;
         }
 
+        const generation = ++this.loadGeneration;
+        if (
+            this.lastRenderedRoadmapId &&
+            this.lastRenderedRoadmapId !== roadmapId
+        ) {
+            this.resetMarkmapInstance();
+        }
+
         this.currentId = roadmapId;
         this.currentNodes = parseMarkdownTree(roadmap.content);
         this.checked = loadCheckedSet(roadmapId);
@@ -977,7 +1061,7 @@ class RoadmapView {
             this.checked,
             this.currentNodes
         );
-        await this.renderMindmap(markdown);
+        await this.renderMindmap(markdown, undefined, generation, roadmapId);
     }
 
     private async exportXMind(): Promise<void> {
