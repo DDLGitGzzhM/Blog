@@ -1248,8 +1248,7 @@ class RoadmapView {
             .forEach((node) => node.remove());
     }
 
-    private removeNodeControls(element: SVGGElement): void {
-        this.removeNodeCheckbox(element);
+    private removeEditControls(element: SVGGElement): void {
         element
             .querySelectorAll(".roadmap-node-actions")
             .forEach((node) => node.remove());
@@ -1260,6 +1259,11 @@ class RoadmapView {
             contentDiv.contentEditable = "false";
             delete contentDiv.dataset.roadmapTitleBound;
         }
+    }
+
+    private removeNodeControls(element: SVGGElement): void {
+        this.removeNodeCheckbox(element);
+        this.removeEditControls(element);
     }
 
     private getNodeText(element: SVGGElement): string {
@@ -1366,7 +1370,7 @@ class RoadmapView {
         } else {
             element.classList.remove("roadmap-editable-node");
             element.removeEventListener("click", this.handleNodeSelectClick);
-            this.removeNodeControls(element);
+            this.removeEditControls(element);
         }
     }
 
