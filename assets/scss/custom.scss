@@ -399,6 +399,25 @@ body.page-roadmap {
         transition: background-color 0.15s ease, border-color 0.15s ease;
     }
 
+    .roadmap-edit-wrap {
+        display: flex;
+        align-items: center;
+    }
+
+    .roadmap-edit-status {
+        font-size: 1.2rem;
+        color: var(--card-text-color-secondary);
+        white-space: nowrap;
+
+        &.is-error {
+            color: #e57373;
+        }
+
+        &.is-saving {
+            color: var(--roadmap-accent);
+        }
+    }
+
     .roadmap-export-btn:hover,
     .roadmap-toolbar-btn:hover {
         border-color: var(--roadmap-accent);
@@ -499,6 +518,59 @@ body.page-roadmap {
 
     g.markmap-node.roadmap-document-root > circle {
         fill: rgba(var(--body-text-color), 0.25);
+    }
+
+    g.markmap-node.roadmap-editable-node foreignObject.markmap-foreign > div > div {
+        cursor: text;
+    }
+
+    g.markmap-node.roadmap-editable-node .roadmap-node-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        margin-left: 4px;
+        vertical-align: middle;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    g.markmap-node.is-selected .roadmap-node-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .roadmap-node-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.6rem;
+        height: 1.6rem;
+        padding: 0;
+        border: 1px solid rgba(var(--body-text-color), 0.2);
+        border-radius: 4px;
+        background: var(--card-background);
+        color: var(--card-text-color-main);
+        font-size: 1.2rem;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .roadmap-node-action:hover {
+        border-color: var(--roadmap-accent);
+        background: rgba(90, 160, 255, 0.12);
+    }
+
+    .roadmap-node-action-remove:hover {
+        border-color: #e57373;
+        background: rgba(229, 115, 115, 0.12);
+        color: #e57373;
+    }
+
+    g.markmap-node.is-selected > circle {
+        stroke: var(--roadmap-accent);
+        stroke-width: 2px;
     }
 
     @media (max-width: 860px) {

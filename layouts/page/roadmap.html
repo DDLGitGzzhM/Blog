@@ -14,7 +14,7 @@
             <div class="roadmap-header-text">
                 <h1 class="section-title">{{ .Title }}</h1>
                 <p class="roadmap-subtitle">
-                    在思维导图上直接勾选完成项，支持导出 XMind
+                    在思维导图上直接勾选完成项，支持导出 XMind；本地开发时点击节点可 +/- 编辑并自动保存
                 </p>
                 <div class="roadmap-progress-wrap" id="roadmap-progress-wrap" hidden>
                     <div class="roadmap-progress-bar" aria-hidden="true">
@@ -37,11 +37,14 @@
                 <button type="button" class="roadmap-export-btn" id="roadmap-export-xmind">
                     导出 XMind
                 </button>
+                <div class="roadmap-edit-wrap" id="roadmap-edit-wrap" hidden>
+                    <span class="roadmap-edit-status" id="roadmap-edit-status"></span>
+                </div>
             </div>
         </div>
     </header>
 
-    <div class="roadmap-page" id="roadmap-page">
+    <div class="roadmap-page" id="roadmap-page" data-roadmap-api="http://127.0.0.1:8787">
         <script type="application/json" id="roadmap-data">[
             {{- range $index, $item := $roadmaps -}}
                 {{- if $index }},{{ end -}}

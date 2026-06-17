@@ -8,6 +8,7 @@ interface RoadmapNode {
     id: string;
     title: string;
     level: number;
+    kind: "heading" | "list";
     children: RoadmapNode[];
     checkable: boolean;
 }
@@ -18,8 +19,18 @@ interface MarkmapDataNode {
     payload?: { fold?: number; roadmapId?: string };
 }
 
+interface MarkmapStateNode extends MarkmapDataNode {
+    state?: {
+        id: number;
+        depth: number;
+        key: string;
+        path: string;
+    };
+    children?: MarkmapStateNode[];
+}
+
 interface MarkmapInstance {
-    setData: (data: unknown) => void;
+    setData: (data: unknown) => void | Promise<void>;
     fit: () => void;
     toggleNode?: (data: unknown, recursive?: boolean) => Promise<void>;
     zoom?: {
@@ -28,6 +39,12 @@ interface MarkmapInstance {
             transform: unknown
         ) => void;
     };
+}
+
+interface MarkmapInstanceInternal extends MarkmapInstance {
+    state?: { data?: MarkmapStateNode };
+    renderData?: (origin?: MarkmapStateNode) => Promise<void>;
+    _initializeData?: (node: MarkmapDataNode) => MarkmapStateNode;
 }
 
 interface D3ZoomTransform {
@@ -89,6 +106,7 @@ declare const window: Window & {
 
 const STORAGE_PREFIX = "blog-roadmap-progress:";
 const VIEW_STORAGE_PREFIX = "blog-roadmap-view:";
+const DEFAULT_ROADMAP_API = "http://127.0.0.1:8787";
 
 interface SavedView {
     x: number;
@@ -126,15 +144,20 @@ const stripCheckbox = (line: string): string => {
     return line.trim();
 };
 
+const LIST_ITEM_RE =
+    /^(\s*)[-*+]\s+(?:\[([ xX])\]\s+)?(.+)$/;
+
 const parseMarkdownTree = (markdown: string): RoadmapNode[] => {
     const root: RoadmapNode = {
         id: "root",
         title: "root",
         level: 0,
+        kind: "heading",
         children: [],
         checkable: false,
     };
     const stack: RoadmapNode[] = [root];
+    const listStack: RoadmapNode[] = [];
     const idCounts = new Map<string, number>();
 
     const makeId = (title: string, parentId: string): string => {
@@ -155,12 +178,14 @@ const parseMarkdownTree = (markdown: string): RoadmapNode[] => {
 
         const headingMatch = trimmed.match(HEADING_RE);
         if (headingMatch) {
+            listStack.length = 0;
             const level = headingMatch[1].length;
             const title = headingMatch[2].replace(CHECKED_PREFIX, "").trim();
             const node: RoadmapNode = {
                 id: "",
                 title,
                 level,
+                kind: "heading",
                 children: [],
                 checkable: level > 1,
             };
@@ -176,22 +201,32 @@ const parseMarkdownTree = (markdown: string): RoadmapNode[] => {
             return;
         }
 
-        const taskMatch = trimmed.match(TASK_RE);
-        const listMatch = trimmed.match(LIST_RE);
-        if (!taskMatch && !listMatch) {
+        const listMatch = line.match(LIST_ITEM_RE);
+        if (!listMatch) {
             return;
         }
 
-        const title = stripCheckbox(trimmed).replace(CHECKED_PREFIX, "").trim();
-        const parent = stack[stack.length - 1];
+        const indent = listMatch[1].length;
+        const depth = Math.floor(indent / 2);
+        const title = listMatch[3].replace(CHECKED_PREFIX, "").trim();
+
+        while (listStack.length > depth) {
+            listStack.pop();
+        }
+
+        const parent =
+            depth === 0 ? stack[stack.length - 1] : listStack[depth - 1];
         const node: RoadmapNode = {
             id: makeId(title, parent.id),
             title,
             level: parent.level + 1,
+            kind: "list",
             children: [],
             checkable: true,
         };
         parent.children.push(node);
+        listStack.length = depth;
+        listStack.push(node);
     });
 
     return root.children;
@@ -225,6 +260,135 @@ const findNodeById = (
         }
     }
     return undefined;
+};
+
+const findNodeParent = (
+    nodes: RoadmapNode[],
+    nodeId: string,
+    parent: RoadmapNode | null = null
+): { parent: RoadmapNode | null; index: number } | null => {
+    for (let index = 0; index < nodes.length; index += 1) {
+        const node = nodes[index];
+        if (node.id === nodeId) {
+            return { parent, index };
+        }
+        const found = findNodeParent(node.children, nodeId, node);
+        if (found) {
+            return found;
+        }
+    }
+    return null;
+};
+
+const formatNodeTitle = (node: RoadmapNode, checked: Set<string>): string =>
+    checked.has(node.id) ? `${CHECKED_PREFIX}${node.title}` : node.title;
+
+const serializeTreeToMarkdown = (
+    nodes: RoadmapNode[],
+    checked: Set<string>
+): string => {
+    const lines: string[] = [];
+
+    const walk = (node: RoadmapNode, listDepth = 0): void => {
+        if (node.kind === "heading") {
+            lines.push(
+                `${"#".repeat(node.level)} ${formatNodeTitle(node, checked)}`
+            );
+            node.children.forEach((child) => walk(child, 0));
+            return;
+        }
+
+        lines.push(`${"  ".repeat(listDepth)}- ${formatNodeTitle(node, checked)}`);
+        node.children.forEach((child) => walk(child, listDepth + 1));
+    };
+
+    nodes.forEach((node) => walk(node));
+    return lines.length === 0 ? "" : `${lines.join("\n")}\n`;
+};
+
+const removeNodeById = (nodes: RoadmapNode[], nodeId: string): boolean => {
+    const location = findNodeParent(nodes, nodeId);
+    if (!location) {
+        return false;
+    }
+
+    const siblings = location.parent ? location.parent.children : nodes;
+    siblings.splice(location.index, 1);
+    return true;
+};
+
+const updateNodeTitleById = (
+    nodes: RoadmapNode[],
+    nodeId: string,
+    title: string
+): boolean => {
+    const node = findNodeById(nodes, nodeId);
+    if (!node) {
+        return false;
+    }
+    node.title = title.trim();
+    return node.title.length > 0;
+};
+
+const addChildNode = (
+    nodes: RoadmapNode[],
+    parentId: string,
+    title: string
+): RoadmapNode | null => {
+    const parent = findNodeById(nodes, parentId);
+    const trimmed = title.trim();
+    if (!parent || trimmed.length === 0) {
+        return null;
+    }
+
+    const idCounts = new Map<string, number>();
+    const makeId = (value: string, prefix: string): string => {
+        const base = `${prefix}/${slugify(value) || "node"}`;
+        const count = idCounts.get(base) || 0;
+        idCounts.set(base, count + 1);
+        return count === 0 ? base : `${base}-${count}`;
+    };
+
+    const useHeading = parent.kind === "heading" && parent.level < 6;
+    const child: RoadmapNode = {
+        id: makeId(trimmed, parent.id),
+        title: trimmed,
+        level: useHeading ? parent.level + 1 : parent.level + 1,
+        kind: useHeading ? "heading" : "list",
+        children: [],
+        checkable: useHeading ? parent.level + 1 > 1 : true,
+    };
+    parent.children.push(child);
+    return child;
+};
+
+const checkEditAPIAvailable = async (apiBase: string): Promise<boolean> => {
+    try {
+        const response = await fetch(`${apiBase}/api/health`, {
+            signal: AbortSignal.timeout(1500),
+        });
+        return response.ok;
+    } catch {
+        return false;
+    }
+};
+
+const saveRoadmapToAPI = async (
+    apiBase: string,
+    roadmapId: string,
+    content: string
+): Promise<void> => {
+    const response = await fetch(`${apiBase}/api/roadmap/${roadmapId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+    });
+    if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+            error?: string;
+        } | null;
+        throw new Error(payload?.error || "保存失败");
+    }
 };
 
 const collectDescendantCheckableIds = (node: RoadmapNode): string[] => {
@@ -451,6 +615,17 @@ class RoadmapView {
     private viewPersistTimer = 0;
     private loadGeneration = 0;
 
+    private readonly apiBase: string;
+    private readonly editWrap: HTMLElement | null;
+    private readonly editStatus: HTMLElement | null;
+
+    private editModeAvailable = false;
+    private editModeEnabled = false;
+    private selectedNodeId = "";
+    private saving = false;
+    private saveTimer = 0;
+    private outsideClickBound = false;
+
     constructor(
         roadmaps: RoadmapData[],
         select: HTMLSelectElement,
@@ -459,7 +634,10 @@ class RoadmapView {
         progressText: HTMLElement,
         mindmapSvg: SVGSVGElement,
         mindmapToolbar: HTMLElement,
-        exportBtn: HTMLButtonElement
+        exportBtn: HTMLButtonElement,
+        apiBase: string,
+        editWrap: HTMLElement | null,
+        editStatus: HTMLElement | null
     ) {
         this.roadmaps = roadmaps;
         this.select = select;
@@ -469,6 +647,9 @@ class RoadmapView {
         this.mindmapSvg = mindmapSvg;
         this.mindmapToolbar = mindmapToolbar;
         this.exportBtn = exportBtn;
+        this.apiBase = apiBase;
+        this.editWrap = editWrap;
+        this.editStatus = editStatus;
     }
 
     init(): void {
@@ -481,7 +662,260 @@ class RoadmapView {
         this.renderToolbar();
         this.bindEvents();
         window.addEventListener("pagehide", () => this.persistCurrentView());
-        void this.loadRoadmap(this.currentId);
+        void this.bootstrap();
+    }
+
+    private async bootstrap(): Promise<void> {
+        await this.setupEditMode();
+        await this.loadRoadmap(this.currentId);
+    }
+
+    private async setupEditMode(): Promise<void> {
+        this.editModeAvailable = await checkEditAPIAvailable(this.apiBase);
+        if (this.editWrap) {
+            this.editWrap.hidden = !this.editModeAvailable;
+        }
+        if (!this.editModeAvailable) {
+            return;
+        }
+
+        this.editModeEnabled = true;
+        this.mindmapSvg.classList.add("roadmap-edit-active");
+        this.bindOutsideClickClear();
+        this.setEditStatus("本地编辑已启用，点击节点可 +/-");
+    }
+
+    private bindOutsideClickClear(): void {
+        if (this.outsideClickBound) {
+            return;
+        }
+        this.outsideClickBound = true;
+        this.mindmapSvg.addEventListener("click", (event) => {
+            if (!this.editModeEnabled || !this.selectedNodeId) {
+                return;
+            }
+            const target = event.target as Element | null;
+            if (target?.closest("g.markmap-node")) {
+                return;
+            }
+            this.clearSelection();
+        });
+    }
+
+    private clearSelection(): void {
+        this.selectedNodeId = "";
+        this.nodeElements.forEach((element) => {
+            element.classList.remove("is-selected");
+            element
+                .querySelectorAll(".roadmap-node-actions")
+                .forEach((node) => node.remove());
+        });
+    }
+
+    private selectNode(nodeId: string): void {
+        if (!this.editModeEnabled || !nodeId || this.isDocumentRootId(nodeId)) {
+            return;
+        }
+
+        this.selectedNodeId = nodeId;
+        this.nodeElements.forEach((element, id) => {
+            const selected = id === nodeId;
+            element.classList.toggle("is-selected", selected);
+            element
+                .querySelectorAll(".roadmap-node-actions")
+                .forEach((node) => node.remove());
+            if (selected) {
+                this.renderNodeEditActions(element, id);
+            }
+        });
+    }
+
+    private syncRoadmapContent(): void {
+        const roadmap = this.getCurrentRoadmap();
+        if (!roadmap) {
+            return;
+        }
+
+        roadmap.content = serializeTreeToMarkdown(
+            this.currentNodes,
+            this.checked
+        );
+        this.updateProgress();
+        this.scheduleAutoSave();
+    }
+
+    private refreshMindmapStructure(originRoadmapId?: string): void {
+        void this.patchMarkmapInPlace(originRoadmapId);
+    }
+
+    private findMarkmapNodeByRoadmapId(
+        node: MarkmapDataNode,
+        roadmapId: string
+    ): MarkmapStateNode | undefined {
+        const current = node as MarkmapStateNode;
+        if (current.payload?.roadmapId === roadmapId) {
+            return current;
+        }
+
+        for (const child of current.children || []) {
+            const found = this.findMarkmapNodeByRoadmapId(child, roadmapId);
+            if (found) {
+                return found;
+            }
+        }
+
+        return undefined;
+    }
+
+    private async patchMarkmapInPlace(
+        originRoadmapId?: string
+    ): Promise<void> {
+        const markmap = this.markmapInstance as MarkmapInstanceInternal | null;
+        if (!markmap?.state?.data || !this.transformer) {
+            return;
+        }
+
+        const savedView = this.readZoomTransform();
+        const markdown = serializeTreeToMarkdown(
+            this.currentNodes,
+            this.checked
+        );
+        const { root } = this.transformer.transform(markdown);
+        const newRoot = root as MarkmapDataNode;
+        bindRoadmapIds(newRoot, this.currentNodes[0] ?? null);
+
+        if (!markmap._initializeData || !markmap.renderData) {
+            await markmap.setData(newRoot);
+            this.attachMindmapInteractions();
+            return;
+        }
+
+        markmap.state.data = markmap._initializeData(newRoot);
+
+        const origin = originRoadmapId
+            ? this.findMarkmapNodeByRoadmapId(
+                  markmap.state.data,
+                  originRoadmapId
+              )
+            : undefined;
+        await markmap.renderData(origin);
+
+        if (savedView) {
+            this.applySavedView(savedView);
+        }
+
+        window.requestAnimationFrame(() => {
+            this.attachMindmapInteractions();
+            if (this.selectedNodeId) {
+                this.selectNode(this.selectedNodeId);
+            }
+        });
+    }
+
+    private isDocumentRootId(nodeId: string): boolean {
+        const root = this.getDocumentRoot();
+        return Boolean(root && root.id === nodeId);
+    }
+
+    private addChildToNode(nodeId: string): void {
+        const child = addChildNode(this.currentNodes, nodeId, "新节点");
+        if (!child) {
+            this.setEditStatus("添加子节点失败", true);
+            return;
+        }
+
+        this.syncRoadmapContent();
+        this.selectedNodeId = child.id;
+        this.refreshMindmapStructure(nodeId);
+    }
+
+    private deleteNode(nodeId: string): void {
+        if (this.isDocumentRootId(nodeId)) {
+            return;
+        }
+
+        const node = findNodeById(this.currentNodes, nodeId);
+        if (!node) {
+            return;
+        }
+
+        if (
+            node.children.length > 0 &&
+            !window.confirm(
+                `确定删除节点「${node.title}」及其所有子节点吗？`
+            )
+        ) {
+            return;
+        }
+
+        const parentLocation = findNodeParent(this.currentNodes, nodeId);
+        const originRoadmapId =
+            parentLocation?.parent?.id ?? this.getDocumentRoot()?.id;
+
+        if (!removeNodeById(this.currentNodes, nodeId)) {
+            this.setEditStatus("删除节点失败", true);
+            return;
+        }
+
+        if (this.selectedNodeId === nodeId) {
+            this.clearSelection();
+        }
+        this.syncRoadmapContent();
+        this.refreshMindmapStructure(originRoadmapId);
+    }
+
+    private scheduleAutoSave(): void {
+        if (!this.editModeAvailable) {
+            return;
+        }
+        window.clearTimeout(this.saveTimer);
+        this.saveTimer = window.setTimeout(() => {
+            void this.autoSaveToFile();
+        }, 400);
+    }
+
+    private async autoSaveToFile(): Promise<void> {
+        if (this.saving || !this.editModeAvailable) {
+            return;
+        }
+
+        const roadmap = this.getCurrentRoadmap();
+        if (!roadmap) {
+            return;
+        }
+
+        this.saving = true;
+        this.setEditStatus("保存中…", false, true);
+
+        const content = serializeTreeToMarkdown(
+            this.currentNodes,
+            this.checked
+        );
+
+        try {
+            await saveRoadmapToAPI(this.apiBase, this.currentId, content);
+            roadmap.content = content;
+            this.setEditStatus("已自动保存");
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "保存失败";
+            this.setEditStatus(message, true);
+        } finally {
+            this.saving = false;
+        }
+    }
+
+    private setEditStatus(
+        message: string,
+        isError = false,
+        isSaving = false
+    ): void {
+        if (!this.editStatus) {
+            return;
+        }
+        this.editStatus.textContent = message;
+        this.editStatus.classList.toggle("is-error", isError);
+        this.editStatus.classList.toggle("is-saving", isSaving);
     }
 
     private bindEvents(): void {
@@ -791,9 +1225,20 @@ class RoadmapView {
         element
             .querySelectorAll(".roadmap-checkbox-inline")
             .forEach((node) => node.remove());
+    }
+
+    private removeNodeControls(element: SVGGElement): void {
+        this.removeNodeCheckbox(element);
         element
-            .querySelector(".roadmap-node-content-wrap")
-            ?.classList.remove("roadmap-node-content-wrap");
+            .querySelectorAll(".roadmap-node-actions")
+            .forEach((node) => node.remove());
+
+        const textFo = this.getTextForeignObject(element);
+        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
+        if (contentDiv) {
+            contentDiv.contentEditable = "false";
+            delete contentDiv.dataset.roadmapTitleBound;
+        }
     }
 
     private getNodeText(element: SVGGElement): string {
@@ -804,6 +1249,7 @@ class RoadmapView {
         }
         const clone = contentDiv.cloneNode(true) as HTMLDivElement;
         clone.querySelector(".roadmap-checkbox-inline")?.remove();
+        clone.querySelector(".roadmap-node-actions")?.remove();
         return normalizeNodeTitle(clone.textContent?.trim() || "");
     }
 
@@ -868,7 +1314,12 @@ class RoadmapView {
             return;
         }
         rootElement.classList.add("roadmap-document-root");
-        this.removeNodeCheckbox(rootElement);
+        this.removeNodeControls(rootElement);
+
+        const root = this.getDocumentRoot();
+        if (root && this.editModeEnabled) {
+            this.setupEditableTitle(rootElement, root.id);
+        }
     }
 
     private bindDomNode(element: SVGGElement, node: RoadmapNode): void {
@@ -880,7 +1331,134 @@ class RoadmapView {
 
         const isChecked = this.checked.has(node.id);
         element.classList.toggle("is-done", isChecked);
+        element.classList.toggle("is-selected", node.id === this.selectedNodeId);
         this.renderNodeCheckbox(element, node.id, isChecked);
+
+        if (this.editModeEnabled) {
+            element.classList.add("roadmap-editable-node");
+            element.removeEventListener("click", this.handleNodeSelectClick);
+            element.addEventListener("click", this.handleNodeSelectClick);
+            if (node.id === this.selectedNodeId) {
+                this.renderNodeEditActions(element, node.id);
+            }
+            this.setupEditableTitle(element, node.id);
+        } else {
+            element.classList.remove("roadmap-editable-node");
+            element.removeEventListener("click", this.handleNodeSelectClick);
+            this.removeNodeControls(element);
+        }
+    }
+
+    private handleNodeSelectClick = (event: Event): void => {
+        if (!this.editModeEnabled) {
+            return;
+        }
+
+        const target = event.target as HTMLElement | null;
+        if (
+            target?.closest(".roadmap-checkbox-inline") ||
+            target?.closest(".roadmap-node-actions")
+        ) {
+            return;
+        }
+
+        const element = event.currentTarget as SVGGElement | null;
+        const nodeId = element?.dataset.roadmapId;
+        if (!nodeId) {
+            return;
+        }
+
+        event.stopPropagation();
+        this.selectNode(nodeId);
+    };
+
+    private renderNodeEditActions(
+        element: SVGGElement,
+        nodeId: string
+    ): void {
+        const xhtmlNS = "http://www.w3.org/1999/xhtml";
+        const textFo = this.getTextForeignObject(element);
+        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
+        if (!contentDiv) {
+            return;
+        }
+
+        contentDiv
+            .querySelectorAll(".roadmap-node-actions")
+            .forEach((node) => node.remove());
+
+        const actions = document.createElementNS(xhtmlNS, "span");
+        actions.className = "roadmap-node-actions";
+
+        const addBtn = document.createElementNS(xhtmlNS, "button");
+        addBtn.type = "button";
+        addBtn.className = "roadmap-node-action roadmap-node-action-add";
+        addBtn.textContent = "+";
+        addBtn.title = "添加子节点";
+        addBtn.setAttribute("aria-label", "添加子节点");
+        addBtn.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        addBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            this.addChildToNode(nodeId);
+        });
+
+        actions.appendChild(addBtn);
+
+        const removeBtn = document.createElementNS(xhtmlNS, "button");
+        removeBtn.type = "button";
+        removeBtn.className = "roadmap-node-action roadmap-node-action-remove";
+        removeBtn.textContent = "−";
+        removeBtn.title = "删除节点";
+        removeBtn.setAttribute("aria-label", "删除节点");
+        removeBtn.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        removeBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            this.deleteNode(nodeId);
+        });
+        actions.appendChild(removeBtn);
+
+        contentDiv.appendChild(actions);
+    }
+
+    private setupEditableTitle(element: SVGGElement, nodeId: string): void {
+        const textFo = this.getTextForeignObject(element);
+        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
+        if (!contentDiv || contentDiv.dataset.roadmapTitleBound === "1") {
+            return;
+        }
+
+        contentDiv.dataset.roadmapTitleBound = "1";
+        contentDiv.contentEditable = "true";
+        contentDiv.spellcheck = false;
+
+        contentDiv.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                contentDiv.blur();
+            }
+        });
+
+        contentDiv.addEventListener("blur", () => {
+            const title = this.getNodeText(element);
+            const node = findNodeById(this.currentNodes, nodeId);
+            if (!node || !title) {
+                return;
+            }
+            if (normalizeNodeTitle(node.title) === normalizeNodeTitle(title)) {
+                return;
+            }
+            if (!updateNodeTitleById(this.currentNodes, nodeId, title)) {
+                this.setEditStatus("标题不能为空", true);
+                return;
+            }
+            this.syncRoadmapContent();
+        });
     }
 
     private bindDomNodesByTitle(
@@ -1009,6 +1587,9 @@ class RoadmapView {
         });
 
         if (!rerender) {
+            if (this.editModeAvailable) {
+                this.syncRoadmapContent();
+            }
             return;
         }
 
@@ -1046,6 +1627,7 @@ class RoadmapView {
         }
 
         this.currentId = roadmapId;
+        this.clearSelection();
         this.currentNodes = parseMarkdownTree(roadmap.content);
         this.checked = loadCheckedSet(roadmapId);
 
@@ -1109,6 +1691,7 @@ class RoadmapView {
 
 export const initRoadmap = (): void => {
     const dataEl = document.getElementById("roadmap-data");
+    const page = document.getElementById("roadmap-page");
     const select = document.getElementById(
         "roadmap-select"
     ) as HTMLSelectElement | null;
@@ -1122,6 +1705,8 @@ export const initRoadmap = (): void => {
     const exportBtn = document.getElementById(
         "roadmap-export-xmind"
     ) as HTMLButtonElement | null;
+    const editWrap = document.getElementById("roadmap-edit-wrap");
+    const editStatus = document.getElementById("roadmap-edit-status");
 
     if (
         !dataEl ||
@@ -1144,6 +1729,9 @@ export const initRoadmap = (): void => {
         return;
     }
 
+    const apiBase =
+        page?.dataset.roadmapApi?.trim() || DEFAULT_ROADMAP_API;
+
     const view = new RoadmapView(
         roadmaps,
         select,
@@ -1152,7 +1740,10 @@ export const initRoadmap = (): void => {
         progressText,
         mindmapSvg,
         mindmapToolbar,
-        exportBtn
+        exportBtn,
+        apiBase,
+        editWrap,
+        editStatus
     );
     view.init();
 };
