@@ -280,6 +280,36 @@ const findNodeParent = (
     return null;
 };
 
+const collectAllNodeIds = (nodes: RoadmapNode[]): Set<string> => {
+    const ids = new Set<string>();
+    const walk = (items: RoadmapNode[]): void => {
+        items.forEach((node) => {
+            ids.add(node.id);
+            walk(node.children);
+        });
+    };
+    walk(nodes);
+    return ids;
+};
+
+const makeUniqueNodeId = (
+    nodes: RoadmapNode[],
+    parentId: string,
+    title: string
+): string => {
+    const existingIds = collectAllNodeIds(nodes);
+    const base = `${parentId}/${slugify(title) || "node"}`;
+    if (!existingIds.has(base)) {
+        return base;
+    }
+
+    let index = 1;
+    while (existingIds.has(`${base}-${index}`)) {
+        index += 1;
+    }
+    return `${base}-${index}`;
+};
+
 const formatNodeTitle = (node: RoadmapNode, checked: Set<string>): string =>
     checked.has(node.id) ? `${CHECKED_PREFIX}${node.title}` : node.title;
 
@@ -341,19 +371,11 @@ const addChildNode = (
         return null;
     }
 
-    const idCounts = new Map<string, number>();
-    const makeId = (value: string, prefix: string): string => {
-        const base = `${prefix}/${slugify(value) || "node"}`;
-        const count = idCounts.get(base) || 0;
-        idCounts.set(base, count + 1);
-        return count === 0 ? base : `${base}-${count}`;
-    };
-
     const useHeading = parent.kind === "heading" && parent.level < 6;
     const child: RoadmapNode = {
-        id: makeId(trimmed, parent.id),
+        id: makeUniqueNodeId(nodes, parent.id, trimmed),
         title: trimmed,
-        level: useHeading ? parent.level + 1 : parent.level + 1,
+        level: parent.level + 1,
         kind: useHeading ? "heading" : "list",
         children: [],
         checkable: useHeading ? parent.level + 1 > 1 : true,
@@ -429,6 +451,18 @@ const normalizeNodeTitle = (value: string): string => {
         .trim();
 };
 
+const collectAllRoadmapNodes = (nodes: RoadmapNode[]): RoadmapNode[] => {
+    const result: RoadmapNode[] = [];
+    const walk = (items: RoadmapNode[]): void => {
+        items.forEach((node) => {
+            result.push(node);
+            walk(node.children);
+        });
+    };
+    walk(nodes);
+    return result;
+};
+
 const bindRoadmapIds = (
     markmapNode: MarkmapDataNode,
     roadmapRoot: RoadmapNode | null
@@ -438,14 +472,14 @@ const bindRoadmapIds = (
     }
 
     const titleQueues = new Map<string, RoadmapNode[]>();
-    const collectRoadmapNodes = (node: RoadmapNode): void => {
+    const enqueueRoadmapNode = (node: RoadmapNode): void => {
         const key = normalizeNodeTitle(node.title);
         const list = titleQueues.get(key) || [];
         list.push(node);
         titleQueues.set(key, list);
-        node.children.forEach(collectRoadmapNodes);
+        node.children.forEach(enqueueRoadmapNode);
     };
-    collectRoadmapNodes(roadmapRoot);
+    enqueueRoadmapNode(roadmapRoot);
 
     const queueIndex = new Map<string, number>();
     const walkMarkmap = (node: MarkmapDataNode): void => {
@@ -642,7 +676,11 @@ class RoadmapView {
     private selectedNodeId = "";
     private saving = false;
     private saveTimer = 0;
+    private attachTimer = 0;
+    private mindmapMutationObserver: MutationObserver | null = null;
     private outsideClickBound = false;
+    private editActionsOverlay: HTMLElement | null = null;
+    private readonly mindmapViewport: HTMLElement | null;
 
     constructor(
         roadmaps: RoadmapData[],
@@ -668,6 +706,7 @@ class RoadmapView {
         this.apiBase = apiBase;
         this.editWrap = editWrap;
         this.editStatus = editStatus;
+        this.mindmapViewport = mindmapSvg.parentElement;
     }
 
     init(): void {
@@ -684,7 +723,7 @@ class RoadmapView {
     }
 
     private async bootstrap(): Promise<void> {
-        void this.setupEditMode();
+        await this.setupEditMode();
         await this.loadRoadmap(this.currentId);
     }
 
@@ -700,7 +739,11 @@ class RoadmapView {
         this.editModeEnabled = true;
         this.mindmapSvg.classList.add("roadmap-edit-active");
         this.bindOutsideClickClear();
+        this.ensureEditActionsOverlay();
         this.setEditStatus("本地编辑已启用，点击节点可 +/-");
+        if (this.markmapInstance) {
+            this.scheduleAttachMindmapInteractions();
+        }
     }
 
     private bindOutsideClickClear(): void {
@@ -713,6 +756,12 @@ class RoadmapView {
                 return;
             }
             const target = event.target as Element | null;
+            if (target?.closest(".roadmap-node-actions-overlay")) {
+                return;
+            }
+            if (target?.closest(".roadmap-node-action")) {
+                return;
+            }
             if (target?.closest("g.markmap-node")) {
                 return;
             }
@@ -720,30 +769,229 @@ class RoadmapView {
         });
     }
 
-    private clearSelection(): void {
-        this.selectedNodeId = "";
-        this.nodeElements.forEach((element) => {
-            element.classList.remove("is-selected");
-            element
-                .querySelectorAll(".roadmap-node-actions")
-                .forEach((node) => node.remove());
+    private ensureEditActionsOverlay(): HTMLElement | null {
+        if (!this.editModeEnabled || !this.mindmapViewport) {
+            return null;
+        }
+        if (this.editActionsOverlay) {
+            return this.editActionsOverlay;
+        }
+
+        const overlay = document.createElement("div");
+        overlay.className = "roadmap-node-actions-overlay";
+        overlay.hidden = true;
+
+        const addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "roadmap-node-action roadmap-node-action-add";
+        addBtn.textContent = "+";
+        addBtn.title = "添加子节点";
+        addBtn.setAttribute("aria-label", "添加子节点");
+        addBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nodeId = overlay.dataset.roadmapId || this.selectedNodeId;
+            if (nodeId) {
+                this.addChildToNode(nodeId);
+            }
         });
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className =
+            "roadmap-node-action roadmap-node-action-remove";
+        removeBtn.textContent = "−";
+        removeBtn.title = "删除节点";
+        removeBtn.setAttribute("aria-label", "删除节点");
+        removeBtn.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nodeId = overlay.dataset.roadmapId || this.selectedNodeId;
+            if (nodeId) {
+                this.deleteNode(nodeId);
+            }
+        });
+
+        overlay.append(addBtn, removeBtn);
+        this.mindmapViewport.appendChild(overlay);
+        this.editActionsOverlay = overlay;
+
+        window.addEventListener("resize", () => {
+            this.refreshEditActionsOverlay();
+        });
+
+        return overlay;
     }
 
-    private selectNode(nodeId: string): void {
+    private raiseDomNodeToFront(element: SVGGElement): void {
+        const parent = element.parentNode;
+        if (parent) {
+            parent.appendChild(element);
+        }
+    }
+
+    private positionEditActionsOverlay(element: SVGGElement): void {
+        const overlay = this.editActionsOverlay;
+        const viewport = this.mindmapViewport;
+        if (!overlay || !viewport || overlay.hidden) {
+            return;
+        }
+
+        const nodeRect = element.getBoundingClientRect();
+        const viewportRect = viewport.getBoundingClientRect();
+        const overlayWidth = overlay.offsetWidth || 88;
+        const overlayHeight = overlay.offsetHeight || 36;
+
+        let left = nodeRect.right - viewportRect.left + 8;
+        let top =
+            nodeRect.top -
+            viewportRect.top +
+            (nodeRect.height - overlayHeight) / 2;
+
+        const maxLeft = viewport.clientWidth - overlayWidth - 8;
+        const maxTop = viewport.clientHeight - overlayHeight - 8;
+        left = Math.min(Math.max(8, left), Math.max(8, maxLeft));
+        top = Math.min(Math.max(8, top), Math.max(8, maxTop));
+
+        overlay.style.left = `${left}px`;
+        overlay.style.top = `${top}px`;
+    }
+
+    private showEditActionsOverlay(
+        element: SVGGElement,
+        nodeId: string
+    ): void {
+        const overlay = this.ensureEditActionsOverlay();
+        if (!overlay) {
+            return;
+        }
+
+        overlay.dataset.roadmapId = nodeId;
+        overlay.hidden = false;
+        this.raiseDomNodeToFront(element);
+        this.expandForeignObject(element);
+        window.requestAnimationFrame(() => {
+            this.positionEditActionsOverlay(element);
+        });
+
+        const node = findNodeById(this.currentNodes, nodeId);
+        if (node) {
+            this.setEditStatus(`已选中：${node.title}`);
+        }
+    }
+
+    private hideEditActionsOverlay(): void {
+        if (this.editActionsOverlay) {
+            this.editActionsOverlay.hidden = true;
+            delete this.editActionsOverlay.dataset.roadmapId;
+        }
+    }
+
+    private refreshEditActionsOverlay(): void {
+        if (!this.selectedNodeId) {
+            return;
+        }
+        const element = this.resolveDomNodeByRoadmapId(this.selectedNodeId);
+        if (element) {
+            this.positionEditActionsOverlay(element);
+        }
+    }
+
+    private clearSelection(): void {
+        this.selectedNodeId = "";
+        this.hideEditActionsOverlay();
+        this.nodeElements.forEach((element) => {
+            element.classList.remove("is-selected");
+        });
+        if (this.editModeEnabled) {
+            this.setEditStatus("本地编辑已启用，点击节点可 +/-");
+        }
+    }
+
+    private resolveDomNodeByRoadmapId(
+        nodeId: string,
+        clickedElement?: SVGGElement
+    ): SVGGElement | undefined {
+        if (clickedElement) {
+            const clickedId = this.resolveRoadmapIdFromDom(clickedElement);
+            if (clickedId === nodeId) {
+                return clickedElement;
+            }
+        }
+
+        const bound = Array.from(
+            this.mindmapSvg.querySelectorAll<SVGGElement>(
+                "g.markmap-node[data-roadmap-id]"
+            )
+        ).filter((element) => element.dataset.roadmapId === nodeId);
+        if (bound.length > 0) {
+            return bound[0];
+        }
+
+        const node = findNodeById(this.currentNodes, nodeId);
+        if (!node) {
+            return undefined;
+        }
+
+        const title = normalizeNodeTitle(node.title);
+        let titleIndex = 0;
+        for (const item of collectAllRoadmapNodes(this.currentNodes)) {
+            if (normalizeNodeTitle(item.title) !== title) {
+                continue;
+            }
+            if (item.id === nodeId) {
+                break;
+            }
+            titleIndex += 1;
+        }
+
+        let seen = 0;
+        for (const element of this.mindmapSvg.querySelectorAll<SVGGElement>(
+            "g.markmap-node"
+        )) {
+            if (this.isRootDomNode(element)) {
+                continue;
+            }
+            if (this.getNodeDisplayText(element) !== title) {
+                continue;
+            }
+            if (seen === titleIndex) {
+                return element;
+            }
+            seen += 1;
+        }
+
+        return undefined;
+    }
+
+    private selectNode(nodeId: string, clickedElement?: SVGGElement): void {
         if (!this.editModeEnabled || !nodeId || this.isDocumentRootId(nodeId)) {
             return;
         }
 
         this.selectedNodeId = nodeId;
-        this.nodeElements.forEach((element, id) => {
-            const selected = id === nodeId;
+        const allDomNodes = Array.from(
+            this.mindmapSvg.querySelectorAll<SVGGElement>("g.markmap-node")
+        );
+        const selectedElement = this.resolveDomNodeByRoadmapId(
+            nodeId,
+            clickedElement
+        );
+
+        allDomNodes.forEach((element) => {
+            if (this.isRootDomNode(element)) {
+                return;
+            }
+
+            const selected = element === selectedElement;
             element.classList.toggle("is-selected", selected);
-            element
-                .querySelectorAll(".roadmap-node-actions")
-                .forEach((node) => node.remove());
             if (selected) {
-                this.renderNodeEditActions(element, id);
+                const node = findNodeById(this.currentNodes, nodeId);
+                if (node) {
+                    this.bindDomNode(element, node);
+                }
+                this.nodeElements.set(nodeId, element);
+                this.showEditActionsOverlay(element, nodeId);
             }
         });
     }
@@ -762,8 +1010,11 @@ class RoadmapView {
         this.scheduleAutoSave();
     }
 
-    private refreshMindmapStructure(originRoadmapId?: string): void {
-        void this.patchMarkmapInPlace(originRoadmapId);
+    private refreshMindmapStructure(
+        originRoadmapId?: string,
+        focusOrigin = true
+    ): void {
+        void this.patchMarkmapInPlace(originRoadmapId, focusOrigin);
     }
 
     private findMarkmapNodeByRoadmapId(
@@ -786,7 +1037,8 @@ class RoadmapView {
     }
 
     private async patchMarkmapInPlace(
-        originRoadmapId?: string
+        originRoadmapId?: string,
+        focusOrigin = true
     ): Promise<void> {
         const markmap = this.markmapInstance as MarkmapInstanceInternal | null;
         if (!markmap?.state?.data || !this.transformer) {
@@ -810,24 +1062,24 @@ class RoadmapView {
 
         markmap.state.data = markmap._initializeData(newRoot);
 
-        const origin = originRoadmapId
-            ? this.findMarkmapNodeByRoadmapId(
-                  markmap.state.data,
-                  originRoadmapId
-              )
-            : undefined;
+        const origin =
+            focusOrigin && originRoadmapId
+                ? this.findMarkmapNodeByRoadmapId(
+                      markmap.state.data,
+                      originRoadmapId
+                  )
+                : undefined;
         await markmap.renderData(origin);
 
         if (savedView) {
             this.applySavedView(savedView);
         }
 
-        window.requestAnimationFrame(() => {
-            this.scheduleAttachMindmapInteractions();
-            if (this.selectedNodeId) {
-                this.selectNode(this.selectedNodeId);
-            }
-        });
+        await this.waitForMarkmapRender();
+        this.scheduleAttachMindmapInteractions();
+        if (this.selectedNodeId) {
+            this.selectNode(this.selectedNodeId);
+        }
     }
 
     private isDocumentRootId(nodeId: string): boolean {
@@ -844,7 +1096,7 @@ class RoadmapView {
 
         this.syncRoadmapContent();
         this.selectedNodeId = child.id;
-        this.refreshMindmapStructure(nodeId);
+        this.refreshMindmapStructure(child.id);
     }
 
     private deleteNode(nodeId: string): void {
@@ -879,7 +1131,7 @@ class RoadmapView {
             this.clearSelection();
         }
         this.syncRoadmapContent();
-        this.refreshMindmapStructure(originRoadmapId);
+        this.refreshMindmapStructure(originRoadmapId, false);
     }
 
     private scheduleAutoSave(): void {
@@ -968,11 +1220,65 @@ class RoadmapView {
     }
 
     private resetMarkmapInstance(): void {
+        this.mindmapMutationObserver?.disconnect();
+        this.mindmapMutationObserver = null;
         this.mindmapSvg.replaceChildren();
         this.markmapInstance = null;
         this.documentRootDom = null;
         this.nodeElements.clear();
         this.viewPersistenceReady = false;
+    }
+
+    private async waitForMarkmapRender(): Promise<void> {
+        const markmap = this.markmapInstance as MarkmapInstanceInternal | null;
+        if (!markmap?.renderData) {
+            await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 150);
+            });
+            return;
+        }
+
+        try {
+            await markmap.renderData();
+        } catch {
+            await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 150);
+            });
+        }
+    }
+
+    private ensureMindmapMutationObserver(): void {
+        if (this.mindmapMutationObserver) {
+            return;
+        }
+
+        this.mindmapMutationObserver = new MutationObserver(() => {
+            if (!this.shouldReattachMindmap()) {
+                return;
+            }
+            window.clearTimeout(this.attachTimer);
+            this.attachTimer = window.setTimeout(() => {
+                this.scheduleAttachMindmapInteractions();
+            }, 80);
+        });
+        this.mindmapMutationObserver.observe(this.mindmapSvg, {
+            childList: true,
+            subtree: true,
+        });
+    }
+
+    private countBoundDomNodes(): number {
+        return this.mindmapSvg.querySelectorAll(
+            "g.markmap-node[data-roadmap-id]"
+        ).length;
+    }
+
+    private shouldReattachMindmap(): boolean {
+        const domCount = this.mindmapSvg.querySelectorAll(
+            "g.markmap-node"
+        ).length;
+        const boundCount = this.countBoundDomNodes();
+        return domCount > 1 && boundCount < domCount - 1;
     }
 
     private patchMarkmapInstance(): void {
@@ -1087,25 +1393,31 @@ class RoadmapView {
         };
 
         if (!this.markmapInstance) {
-            this.markmapInstance = window.markmap.Markmap.create(
+            const markmapInstance = window.markmap.Markmap.create(
                 this.mindmapSvg,
                 markmapOptions,
                 root
             );
+            this.markmapInstance = markmapInstance;
             this.ensureViewPersistence();
             this.patchMarkmapInstance();
+            this.ensureMindmapMutationObserver();
         } else if (this.lastRenderedRoadmapId === roadmapId) {
-            this.markmapInstance.setData(root);
+            await Promise.resolve(this.markmapInstance.setData(root));
         } else {
             this.resetMarkmapInstance();
-            this.markmapInstance = window.markmap.Markmap.create(
+            const markmapInstance = window.markmap.Markmap.create(
                 this.mindmapSvg,
                 markmapOptions,
                 root
             );
+            this.markmapInstance = markmapInstance;
             this.ensureViewPersistence();
             this.patchMarkmapInstance();
+            this.ensureMindmapMutationObserver();
         }
+
+        await this.waitForMarkmapRender();
 
         const finishRender = (): void => {
             if (this.isRenderStale(generation, roadmapId)) {
@@ -1222,6 +1534,7 @@ class RoadmapView {
         }
         this.viewPersistenceReady = true;
         window.d3.select(this.mindmapSvg).on("zoom.roadmap-view", () => {
+            this.refreshEditActionsOverlay();
             window.clearTimeout(this.viewPersistTimer);
             this.viewPersistTimer = window.setTimeout(() => {
                 this.persistCurrentView();
@@ -1242,6 +1555,41 @@ class RoadmapView {
         return (inner ?? outer) as HTMLDivElement;
     }
 
+    private expandForeignObject(element: SVGGElement): void {
+        const textFo = this.getTextForeignObject(element);
+        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
+        if (!textFo || !contentDiv) {
+            return;
+        }
+
+        const apply = (): void => {
+            const padding = 16;
+            const checkboxReserve = element.querySelector(
+                ".roadmap-checkbox-inline"
+            )
+                ? 28
+                : 0;
+            const contentWidth = contentDiv.scrollWidth + checkboxReserve + padding;
+            const contentHeight = contentDiv.scrollHeight + padding;
+            const parsedWidth = Number.parseFloat(
+                textFo.getAttribute("width") || "0"
+            );
+            const parsedHeight = Number.parseFloat(
+                textFo.getAttribute("height") || "0"
+            );
+
+            if (contentWidth > parsedWidth) {
+                textFo.setAttribute("width", String(Math.ceil(contentWidth)));
+            }
+            if (contentHeight > parsedHeight) {
+                textFo.setAttribute("height", String(Math.ceil(contentHeight)));
+            }
+        };
+
+        apply();
+        window.requestAnimationFrame(apply);
+    }
+
     private removeNodeCheckbox(element: SVGGElement): void {
         element
             .querySelectorAll(".roadmap-checkbox-inline")
@@ -1249,10 +1597,6 @@ class RoadmapView {
     }
 
     private removeEditControls(element: SVGGElement): void {
-        element
-            .querySelectorAll(".roadmap-node-actions")
-            .forEach((node) => node.remove());
-
         const textFo = this.getTextForeignObject(element);
         const contentDiv = textFo ? this.getContentDiv(textFo) : null;
         if (contentDiv) {
@@ -1274,7 +1618,6 @@ class RoadmapView {
         }
         const clone = contentDiv.cloneNode(true) as HTMLDivElement;
         clone.querySelector(".roadmap-checkbox-inline")?.remove();
-        clone.querySelector(".roadmap-node-actions")?.remove();
         return normalizeNodeTitle(clone.textContent?.trim() || "");
     }
 
@@ -1363,15 +1706,59 @@ class RoadmapView {
             element.classList.add("roadmap-editable-node");
             element.removeEventListener("click", this.handleNodeSelectClick);
             element.addEventListener("click", this.handleNodeSelectClick);
-            if (node.id === this.selectedNodeId) {
-                this.renderNodeEditActions(element, node.id);
-            }
             this.setupEditableTitle(element, node.id);
         } else {
             element.classList.remove("roadmap-editable-node");
             element.removeEventListener("click", this.handleNodeSelectClick);
             this.removeEditControls(element);
         }
+    }
+
+    private resolveRoadmapIdFromDom(element: SVGGElement): string {
+        const direct =
+            element.dataset.roadmapId ||
+            (
+                element as SVGGElement & { __data__?: MarkmapDataNode }
+            ).__data__?.payload?.roadmapId ||
+            "";
+        if (direct) {
+            return direct;
+        }
+
+        const title = this.getNodeDisplayText(element);
+        if (!title) {
+            return "";
+        }
+
+        let seen = 0;
+        const domNodes = this.mindmapSvg.querySelectorAll<SVGGElement>(
+            "g.markmap-node"
+        );
+        for (const domNode of domNodes) {
+            if (this.isRootDomNode(domNode)) {
+                continue;
+            }
+            if (this.getNodeDisplayText(domNode) !== title) {
+                continue;
+            }
+            if (domNode === element) {
+                break;
+            }
+            seen += 1;
+        }
+
+        const allNodes = collectAllRoadmapNodes(this.currentNodes);
+        let count = 0;
+        for (const item of allNodes) {
+            if (normalizeNodeTitle(item.title) !== title) {
+                continue;
+            }
+            if (count === seen) {
+                return item.id;
+            }
+            count += 1;
+        }
+        return "";
     }
 
     private handleNodeSelectClick = (event: Event): void => {
@@ -1382,74 +1769,25 @@ class RoadmapView {
         const target = event.target as HTMLElement | null;
         if (
             target?.closest(".roadmap-checkbox-inline") ||
-            target?.closest(".roadmap-node-actions")
+            target?.closest(".roadmap-node-actions-overlay")
         ) {
             return;
         }
 
         const element = event.currentTarget as SVGGElement | null;
-        const nodeId = element?.dataset.roadmapId;
+        if (!element || this.isRootDomNode(element)) {
+            return;
+        }
+
+        const nodeId = this.resolveRoadmapIdFromDom(element);
         if (!nodeId) {
             return;
         }
 
+        element.dataset.roadmapId = nodeId;
         event.stopPropagation();
-        this.selectNode(nodeId);
+        this.selectNode(nodeId, element);
     };
-
-    private renderNodeEditActions(
-        element: SVGGElement,
-        nodeId: string
-    ): void {
-        const xhtmlNS = "http://www.w3.org/1999/xhtml";
-        const textFo = this.getTextForeignObject(element);
-        const contentDiv = textFo ? this.getContentDiv(textFo) : null;
-        if (!contentDiv) {
-            return;
-        }
-
-        contentDiv
-            .querySelectorAll(".roadmap-node-actions")
-            .forEach((node) => node.remove());
-
-        const actions = document.createElementNS(xhtmlNS, "span");
-        actions.className = "roadmap-node-actions";
-
-        const addBtn = document.createElementNS(xhtmlNS, "button");
-        addBtn.type = "button";
-        addBtn.className = "roadmap-node-action roadmap-node-action-add";
-        addBtn.textContent = "+";
-        addBtn.title = "添加子节点";
-        addBtn.setAttribute("aria-label", "添加子节点");
-        addBtn.addEventListener("mousedown", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-        });
-        addBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
-            this.addChildToNode(nodeId);
-        });
-
-        actions.appendChild(addBtn);
-
-        const removeBtn = document.createElementNS(xhtmlNS, "button");
-        removeBtn.type = "button";
-        removeBtn.className = "roadmap-node-action roadmap-node-action-remove";
-        removeBtn.textContent = "−";
-        removeBtn.title = "删除节点";
-        removeBtn.setAttribute("aria-label", "删除节点");
-        removeBtn.addEventListener("mousedown", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-        });
-        removeBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
-            this.deleteNode(nodeId);
-        });
-        actions.appendChild(removeBtn);
-
-        contentDiv.appendChild(actions);
-    }
 
     private setupEditableTitle(element: SVGGElement, nodeId: string): void {
         const textFo = this.getTextForeignObject(element);
@@ -1527,7 +1865,7 @@ class RoadmapView {
         roadmapId: string
     ): boolean {
         const node = findNodeById(this.currentNodes, roadmapId);
-        if (!node?.checkable) {
+        if (!node) {
             return false;
         }
         this.bindDomNode(element, node);
@@ -1535,14 +1873,49 @@ class RoadmapView {
     }
 
     private scheduleAttachMindmapInteractions(): void {
-        const attach = (): void => {
+        window.clearTimeout(this.attachTimer);
+
+        let attempt = 0;
+        const maxAttempts = 24;
+
+        const run = (): void => {
+            if (attempt >= maxAttempts) {
+                if (
+                    this.editModeEnabled &&
+                    this.countBoundDomNodes() === 0 &&
+                    this.mindmapSvg.querySelectorAll("g.markmap-node").length > 1
+                ) {
+                    this.setEditStatus("节点绑定失败，请刷新页面重试", true);
+                }
+                return;
+            }
+            attempt += 1;
+
             this.attachMindmapInteractions();
+
+            const domCount = this.mindmapSvg.querySelectorAll(
+                "g.markmap-node"
+            ).length;
+            const boundCount = this.countBoundDomNodes();
+            const expectedBound = domCount > 1 ? domCount - 1 : 0;
+
+            if (
+                expectedBound > 0 &&
+                boundCount < expectedBound &&
+                attempt < maxAttempts
+            ) {
+                const delay = attempt <= 6 ? 120 : attempt <= 16 ? 250 : 500;
+                this.attachTimer = window.setTimeout(run, delay);
+                return;
+            }
+
+            if (this.selectedNodeId) {
+                this.selectNode(this.selectedNodeId);
+            }
         };
-        attach();
-        window.requestAnimationFrame(() => {
-            attach();
-            window.setTimeout(attach, 120);
-        });
+
+        run();
+        window.requestAnimationFrame(run);
     }
 
     private attachMindmapInteractions(): void {
@@ -1558,10 +1931,11 @@ class RoadmapView {
         const unmatchedDom: SVGGElement[] = [];
 
         domNodes.forEach((element) => {
+            const datum = (
+                element as SVGGElement & { __data__?: MarkmapDataNode }
+            ).__data__;
             const roadmapId =
-                element.dataset.roadmapId ||
-                (element as SVGGElement & { __data__?: MarkmapDataNode })
-                    .__data__?.payload?.roadmapId;
+                datum?.payload?.roadmapId ?? element.dataset.roadmapId;
             if (
                 typeof roadmapId === "string" &&
                 this.bindDomNodeByRoadmapId(element, roadmapId)
@@ -1572,8 +1946,10 @@ class RoadmapView {
         });
 
         if (unmatchedDom.length > 0) {
-            const roadmapNodes = collectCheckableNodes(this.currentNodes);
-            this.bindDomNodesByTitle(unmatchedDom, roadmapNodes);
+            this.bindDomNodesByTitle(
+                unmatchedDom,
+                collectAllRoadmapNodes(this.currentNodes)
+            );
         }
     }
 
@@ -1612,6 +1988,7 @@ class RoadmapView {
             event.stopPropagation();
             this.setChecked(nodeId, input.checked, false);
         });
+        this.expandForeignObject(element);
     }
 
     private getAffectedNodeIds(nodeId: string): string[] {

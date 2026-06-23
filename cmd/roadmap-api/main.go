@@ -44,6 +44,19 @@ func main() {
 	api := router.Group("/api")
 	handler.Register(api)
 
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"service": "roadmap-api",
+			"message": "本地 Roadmap 编辑 API 已运行",
+			"endpoints": gin.H{
+				"health": "GET /api/health",
+				"list":   "GET /api/roadmaps",
+				"get":    "GET /api/roadmap/:id",
+				"save":   "PUT /api/roadmap/:id",
+			},
+		})
+	})
+
 	log.Printf("roadmap-api 已启动: http://%s (root=%s)", *addr, blogRoot)
 	if err := router.Run(*addr); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)

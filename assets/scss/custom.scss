@@ -460,6 +460,24 @@ body.page-roadmap {
             var(--card-background);
     }
 
+    .roadmap-node-actions-overlay {
+        position: absolute;
+        z-index: 20;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px;
+        border-radius: 6px;
+        border: 1px solid rgba(var(--body-text-color), 0.12);
+        background: var(--card-background);
+        box-shadow: var(--shadow-l2);
+        pointer-events: auto;
+    }
+
+    .roadmap-node-actions-overlay[hidden] {
+        display: none !important;
+    }
+
     .roadmap-mindmap-svg {
         display: block;
         width: 100%;
@@ -531,27 +549,16 @@ body.page-roadmap {
         cursor: text;
     }
 
-    g.markmap-node.roadmap-editable-node .roadmap-node-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 2px;
-        margin-left: 4px;
-        vertical-align: middle;
-        opacity: 0;
-        pointer-events: none;
-    }
-
-    g.markmap-node.is-selected .roadmap-node-actions {
-        opacity: 1;
-        pointer-events: auto;
+    g.markmap-node.is-selected foreignObject.markmap-foreign {
+        overflow: visible;
     }
 
     .roadmap-node-action {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 1.6rem;
-        height: 1.6rem;
+        width: 2rem;
+        height: 2rem;
         padding: 0;
         border: 1px solid rgba(var(--body-text-color), 0.2);
         border-radius: 4px;
@@ -561,6 +568,8 @@ body.page-roadmap {
         font-weight: 600;
         line-height: 1;
         cursor: pointer;
+        pointer-events: auto;
+        flex-shrink: 0;
         transition: border-color 0.15s ease, background-color 0.15s ease;
     }
 
@@ -578,6 +587,7 @@ body.page-roadmap {
     g.markmap-node.is-selected > circle {
         stroke: var(--roadmap-accent);
         stroke-width: 2px;
+        pointer-events: none;
     }
 
     @media (max-width: 860px) {
