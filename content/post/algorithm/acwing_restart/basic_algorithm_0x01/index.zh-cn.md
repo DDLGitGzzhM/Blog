@@ -191,3 +191,42 @@ swap(q[i],q[j]);
 划分线：`i - 1`
 
 递归：`quick_sort(q, l, i - 1);` 和 `quick_sort(q, i, r);`
+
+
+## 归并排序
+
+### 算法思路
+
+1. 递归处理大区间一分为2为小区间
+2. 双指针合并两个小区间 ， 保证数组有序
+
+### 核心代码展示
+
+````c++ 
+void merge_sort(int q[], int l, int r) {
+	if(l >= r) return ;
+	int mid = (l + r) >> 1; 
+	merge_sort(q,l,mid) , merge_sort(q,mid + 1, r) ;
+	
+	int k = 0 , i = l , j = mid + 1;  
+
+	while(i <= mid && j <= r) {
+		if(q[i] <= q[j]) temp[++k] = q[i ++ ] ;
+		else temp[++k] = q[j ++ ];
+	}
+	while(i <= mid) temp[++k] = q[i ++ ];
+	while(j <= r) temp[++k] = q[j ++] ;
+	
+	for(int i = l , j = 1 ;  i <= r ; i ++ , j ++ ) q[i] = temp[j];
+}
+````
+
+### 时间复杂度分析
+
+1. 递归处理最多拆分成  logN 个区间，每个区间最多进行 N 次
+
+最坏情况下都排序也是 nlogn 的
+
+### 感悟
+
+归并排序的过程很好理解，但是实际写代码下来 指针很多 `i,j,k,mid` ，然后还加上递归回溯的处理，导致整个过程比较难理解
