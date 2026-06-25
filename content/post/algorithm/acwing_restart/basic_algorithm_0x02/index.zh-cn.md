@@ -1,5 +1,5 @@
 ---
-title: "[Acwing] 基础算法(二)"
+title: "[Acwing] 基础算法(二) 二分"
 description: 当我们重新开始，我们以不再年轻
 date: 2026-06-23
 slug: acwing-basic-0x02
@@ -8,6 +8,7 @@ categories:
     - time-line
 tags: [
   "acwing",
+  "二分"
 ]
 ---
 

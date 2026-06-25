@@ -1,5 +1,5 @@
 ---
-title: "[Acwing] 基础算法(一)"
+title: "[Acwing] 基础算法(一) 排序"
 description: 当我们重新开始，我们以不再年轻
 date: 2026-06-17
 slug: acwing-basic-0x01
@@ -8,6 +8,7 @@ categories:
     - time-line
 tags: [
   "acwing",
+  "排序"
 ]
 ---
 
