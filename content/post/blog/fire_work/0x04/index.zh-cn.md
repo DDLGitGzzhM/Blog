@@ -1,5 +1,5 @@
 ---
-title: "垃圾中堆中黄金"
+title: "垃圾中堆找黄金"
 description: dirty work 中寻找一些闪光点
 date: 2026-07-08
 slug: fire-workd-04
