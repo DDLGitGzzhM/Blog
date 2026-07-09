@@ -111,7 +111,7 @@ MQ → Consumer（CSV 解析 → 标准 OTS 格式 → 入库）
 
 5. Mock 测试体系
 
-### AI一句话总结
+#### AI一句话总结
 
 设计并实现 CAM 加密资产管理系统历史数据异步拉取引擎（Go / Redis / PostgreSQL / MQ）：从 0 搭建 Binance/OKX/Bybit 异步导出全链路（申请 → 轮询 → 下载 → CSV 解析入库），含双层配额控制、Redis 队列解耦、PG 状态机与发版容错恢复；支撑对账与历史回溯，模块累计 100+ 次生产迭代。
 
