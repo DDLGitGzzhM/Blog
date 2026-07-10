@@ -2,6 +2,7 @@
 title: "面经每日一看"
 description:  学累了我就看面经
 date: 2026-07-09
+slug: interview_0x01
 categories:
     - interview
     - time-line
