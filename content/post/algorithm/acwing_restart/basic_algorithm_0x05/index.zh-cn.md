@@ -1,5 +1,5 @@
 ---
-title: "[Acwing] 基础算法（五) 数据结构 单链表"
+title: "[Acwing] 基础算法（五) 数据结构 链表"
 description: 浪费完整的一天
 date: 2026-07-10
 slug: acwing-basic-0x05
@@ -148,6 +148,91 @@ int main() {
         cout<<e[i]<<" ";
     }
 
+    return 0;
+}
+```
+
+## 双链表
+
+### 算法思路
+
+我们假设 `[0] [1]` 代表我们的左右端点
+
+初始化的时候 `r[0] = 1 , l[1] = 0, idx = 2` 
+
+对于插入操作
+
+1. 我们需要给当前节点赋值
+2. 并且使得当前节点的左右指针指向上下两个数 
+
+    - `l[idx] = k, r[idx] = r[k]`
+
+3. 同时修改两个被影响的指针
+
+    - `l[r[k]] = idx, r[k] = idx` 
+
+这是插入右端点的思路，插入左端点可以认为是在前一个节点插入右端点即`inser(l[k],x)` 
+
+对于删除操作,我们需要把 当前节点的上一个节点 和 下一个节点互相建立关系
+
+1. 将当前节点的左节点的右节点指向下一个节点
+
+    - `r[l[k]] = r[k]`
+
+2. 将当前节点的右节点的左节点指向上一个节点
+
+    - `l[r[k]] = l[k]`
+
+另外需要注意的是，我们一开始就使用了两个节点所以对于操作的节点我们应该认为是 `k+1` 
+
+### 代码
+
+```c++
+
+int e[N],l[N],r[N],idx; 
+
+void init() {
+    r[0] = 1, l[1] = 0 ;
+    idx = 2;
+}
+
+void add(int k,int x) {
+    e[idx] = x;
+
+    l[idx] = k ,r[idx] = r[k];
+
+    l[r[k]] = idx, r[k] = idx;
+    idx ++ ; 
+}
+
+void remove(int k) {
+    l[r[k]] = l[k];
+    r[l[k]] = r[k];
+}
+
+int main() {
+    init() ;
+    int n;cin>>n;
+    for(int i = 1 ; i<= n ;i ++ ) {
+        string op;cin>>op;
+        if(op == "L") {
+            int x;cin>>x;
+            add(0,x);
+        }else if(op == "R") {
+            int x;cin>>x;
+            add(l[1], x);
+        }else if(op == "D") {
+            int k;cin>>k;
+            remove(k + 1);
+        }else if(op == "IL") {
+            int k,x;cin>>k>>x;
+            add(l[k+1], x);
+        }else {
+            int k,x;cin>>k>>x;
+            add(k+1,x);
+        }
+    }
+    for(int i = r[0] ; i!= 1; i = r[i]) cout<<e[i]<<" ";
     return 0;
 }
 ```
