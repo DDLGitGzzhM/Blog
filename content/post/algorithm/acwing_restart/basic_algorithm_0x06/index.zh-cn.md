@@ -1,5 +1,5 @@
 ---
-title: "[Acwing] 基础算法（五) 数据结构 栈&队列"
+title: "[Acwing] 基础算法(六) 数据结构 栈&队列"
 description: 平平无奇的一天
 date: 2026-07-11
 slug: acwing-basic-0x06
