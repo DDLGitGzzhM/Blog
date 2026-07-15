@@ -2,6 +2,7 @@
 title: "[all_in_ai]  AI 名词扫盲 prompt"
 description: 是机会 也是 陷阱
 date: 2026-07-15
+slug: ai-prompt-0x02
 categories:
     - time-line
     - ai

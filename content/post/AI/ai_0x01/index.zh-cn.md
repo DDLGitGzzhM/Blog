@@ -2,6 +2,7 @@
 title: "[all_in_ai]  AI 名词扫盲 大模型"
 description: 是机会 也是 陷阱
 date: 2026-07-15
+slug: al-llm-0x01
 categories:
     - time-line
     - ai
