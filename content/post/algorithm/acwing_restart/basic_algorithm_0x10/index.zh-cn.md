@@ -170,3 +170,27 @@ int main() {
 ### 时间复杂度
 
 o sqrtN
+
+### 最大公约数
+
+### 算法思路
+
+我们知道 如果 `x | a` 并且 `x | b` 那么 `x | a * y + b * k` 
+
+同理对于 `gcd(a,b) = gcd(b, a % b)`  为什么等式成立 ？ 因为  `x | b` 那么 `x | a + c * b` 这里的 `c` 就是 `-a/b`
+
+因为 `x | a + c *b - c*b` 等式成立 所以 `x|a`成立
+
+### 代码
+
+```c++
+int gcd(int a,int b) {
+  return b ? gcd(b , a %b) : a; 
+}
+
+```
+
+### 时间复杂度
+
+on 
+
