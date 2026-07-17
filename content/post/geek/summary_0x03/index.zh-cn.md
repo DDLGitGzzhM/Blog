@@ -2,7 +2,7 @@
 title: "[webook-tidy] Gorm & 用户基本功能 & docker"
 description: 登陆与注册的实现
 date: 2026-07-17
-slug: webook-summary-0x02
+slug: webook-summary-0x03
 categories:
     - summary
     - time-line
