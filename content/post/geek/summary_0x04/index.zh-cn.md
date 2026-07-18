@@ -1,5 +1,5 @@
 ---
-title: "[webook-tidy] Session & JWT"
+title: "[webook-tidy] Session & JWT & Security"
 description: none
 date: 2026-07-17
 slug: webook-summary-0x04
