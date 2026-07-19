@@ -38,7 +38,7 @@ tags: [
 
 删除的操作
 
-`e[idx] = x, ne[idx] = ne[k], ne[k] = idx++;`
+`ne[k] = ne[ne[k]];`
 
 下面是一个演示过程 :
 
