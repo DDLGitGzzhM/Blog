@@ -4,7 +4,7 @@ description:  从0到1的协程池实现
 date: 2026-07-20
 slug: gouroutine_pool_0x01
 categories:
-    - interview
+    - golang
     - time-line
 tags: [
   "gold",
