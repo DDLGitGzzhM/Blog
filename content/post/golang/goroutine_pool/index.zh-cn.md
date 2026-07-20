@@ -104,12 +104,122 @@ func Handler(req) error {
 1. 协程占用的内存最终需要 Gc 来回收
 
 
-
----
-
-到点了 要休息吃饭去了，后续内容 TBD 预计这两天处理完
-
 ## 协程池
+
+我们知道 
+
+1. 并发可以提高处理请求的速度
+2. 但是并发数量并不是越多越好
+
+这是一个 `规则怪谈` ，所以这时候 引入了 `协程池`，即固定数量的协程
+
+1. 例如 `nginx` 最多支持 每秒钟并发 `5` 个请求，那么我们就可以启动一个数量为`5`的协程池进行批量工作
+
+
+### 实现 1
+
+#### 架构
+
+1. `work` 实际运行的 `gourtine` 用于并发处理 `func()` 
+
+2. `JobsChannel` 内部任务的队列用于分发任务到 `work()`中
+
+3. `EntryChannel` 对外处理任务的队列，用于对接 `JobsChannel` 的数据
+
+
+
+![gourtine_pool_design_v1.png](gourtine_pool_design_v1.png)
+
+#### 代码剖析
+
+##### Task
+
+定义 Task 其中值字段包含一个 `func value()` 
+
+并且支持一个函数用于执行 `Execute()`
+
+````go
+type Task struct {
+	f func() error
+}
+
+func NewTask(f func() error) *Task {
+	return &Task{f: f}
+}
+
+func (t *Task) Execute() error {
+	return t.f()
+}
+````
+
+##### Pool 
+
+整个 `pool` 定义如下
+
+```go
+type Pool struct {
+	EntryChannel chan *Task // 对外的任务入口
+	JobsChannel  chan *Task // 内部的队列
+	workerNum    int        // 协程池最大的数量
+}
+```
+
+支持的 `Func` 如下 
+
+
+单独解释一下 `Run` 过程
+
+1. 这里先通过 遍历`workerNum` 启动 `gourtine`
+
+2. 启动之后会进入到 `JobsChannel` 此时数据里面没有,会进行`阻塞`
+
+然后下方的数据会进行获取数据并且传入
+
+```go
+func (p *Pool) worker(workerId int) {
+	for task := range p.JobsChannel {
+		task.Execute()
+		fmt.Println("worker ID ", workerId, " ")
+	}
+}
+
+func (p *Pool) Run() {
+    defer close(p.JobsChannel)
+
+	for i := 0; i < p.workerNum; i++ {
+		go p.worker(i)
+	}
+
+	for task := range p.EntryChannel {
+		p.JobsChannel <- task
+	}
+}
+
+```
+
+##### 完整运行
+
+```go
+func Test_ExamplePool(t *testing.T) {
+	a := atomic.Int64{}
+	task := NewTask(func() error {
+		fmt.Println("task :", a.Add(1))
+		return nil
+	})
+	pool := NewPool(3)
+
+	go func() {
+		for i := 10; i != 0; i-- {
+			pool.EntryChannel <- task
+		}
+		defer close(pool.EntryChannel)
+	}()
+
+	pool.Run()
+}
+```
+
+### 实现 2 
 
 ## 手写协程池
 
