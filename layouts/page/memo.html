@@ -1,0 +1,41 @@
+{{ define "body-class" }}page-memo{{ end }}
+
+{{ define "main" }}
+    {{- $memos := slice -}}
+    {{- range resources.Match "memos/*.md" -}}
+        {{- $raw := .Content -}}
+        {{- $weight := 999 -}}
+        {{- $body := $raw -}}
+        {{- $trimmed := strings.TrimLeft " \t\r\n" $raw -}}
+        {{- if hasPrefix $trimmed "---" -}}
+            {{- $parts := split $trimmed "---" -}}
+            {{- if ge (len $parts) 3 -}}
+                {{- $fm := index $parts 1 -}}
+                {{- $body = delimit (after 2 $parts) "---" | strings.TrimLeft "\r\n" -}}
+                {{- with findRE `(?m)^weight:\s*(-?\d+)` $fm -}}
+                    {{- $weight = int (replaceRE `weight:\s*` "" (index . 0)) -}}
+                {{- end -}}
+            {{- end -}}
+        {{- end -}}
+        {{- $title := path.Base (strings.TrimSuffix ".md" .Name) -}}
+        {{- $memos = $memos | append (dict "title" $title "content" $body "weight" $weight) -}}
+    {{- end -}}
+    {{- $memos = sort $memos "weight" "asc" -}}
+
+    <header class="memo-header">
+        <h1 class="section-title">{{ .Title }}</h1>
+    </header>
+
+    <div class="memo-page" id="memo-page">
+        <div class="memo-grid">
+            {{- range $memos -}}
+                <section class="memo-quadrant">
+                    <h2 class="memo-quadrant-title">{{ .title }}</h2>
+                    <div class="memo-quadrant-body article-content">
+                        {{ .content | markdownify }}
+                    </div>
+                </section>
+            {{- end -}}
+        </div>
+    </div>
+{{ end }}

@@ -4,8 +4,9 @@ layout: roadmap
 slug: roadmap
 menu:
     main:
-        weight: -48
+        weight: -47
         params:
             icon: hash
+            deprecated: true
 comments: false
 ---
