@@ -1,5 +1,5 @@
 ---
-title: "高可用 高扩展 高安全 的 登陆与注册的设计"
+title: "高可用 高扩展 高安全 的 登陆与注册的设计 detail"
 description: 我们项目实现了一个 xxxx 
 date: 2026-07-23
 slug: register-login-desin
@@ -313,7 +313,7 @@ Gin 可以考虑使用 `middleware` 进行打印日志
 Gorm 可以考虑使用 `config.Logger`实现
 
 
-其他的地方只能考虑从 Service 插入 logger 或者是维护全局 logger的形式进行输出
+其他的地方只能考虑从 Service 插入 logger 或者是维护全局 logger的形式进行输出com
 
 ## 面试题
 
@@ -331,9 +331,9 @@ Gorm 可以考虑使用 `config.Logger`实现
 
 7.  用户密码加密算法的选取
 
-8.  怎么做登陆校验 ? 利用 Gin 的 middlewawre
+8.  怎么做登陆校验 ? 利用 Gin 的 middleware
 
-9.  刷新 Session 过期时间的集中克星方案
+9.  刷新 Session 过期时间的几种方案
 
 10. 增强登陆的安全性
 - 怎么保护 session_id ?主要还是启用 https协议，设置 cookie 的 secure
@@ -363,7 +363,7 @@ Redis :
 3. 什么是 Ioc 控制反转
 
 
-微信登陆
+微信登陆 (TBD)
 
 1. 微信扫码登陆的流程
 
@@ -383,7 +383,7 @@ Redis :
 
 4. 使用 JWT token 怎么退出登陆
 
-5. 使用 长短 tooken 之后怎么退出登陆
+5. 使用 长短 token 之后怎么退出登陆
 
 5. 使用 JWT 还需要再使用 Session 吗
 
