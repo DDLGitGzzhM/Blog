@@ -2,7 +2,7 @@
 title: "阅读、点赞、收藏 one"
 description: 我们项目实现了一个 xxxx 
 date: 2026-07-29
-slug: interactive-0x01
+slug: interactive-0x02
 categories:
     - golang
     - time-line
