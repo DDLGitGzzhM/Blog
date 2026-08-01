@@ -1,5 +1,5 @@
 ---
-title: "微服务"
+title: "微服务 detail"
 description: 我们项目实现了一个 xxxx 
 date: 2026-07-31
 slug: migrate-0x01
