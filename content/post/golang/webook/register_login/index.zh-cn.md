@@ -8,6 +8,7 @@ categories:
     - time-line
 tags: [
   "gold",
+  "one-detail"
 ]
 ---
 

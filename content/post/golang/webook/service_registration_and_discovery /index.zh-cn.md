@@ -8,6 +8,7 @@ categories:
     - time-line
 tags: [
   "gold",
+  "one-detail"
 ]
 ---
 
@@ -133,6 +134,18 @@ tags: [
 
 
 ## 接入服务注册与发现
+
+### gprc 时候注册中心
+
+gpc 在客户端提供 Resolver 进行对服务的解析 
+
+但是他并没有在 服务端提供 `register` 的功能， grpc 根本不知道你使用的是不是注册中心
+
+![grpc_find.png](grpc_find.png)
+
+### grpc 使用注册中心 etcd 
+
+
 
 ## 服务注册与发现的高可用
 

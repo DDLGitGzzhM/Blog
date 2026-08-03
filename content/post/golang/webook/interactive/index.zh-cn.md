@@ -7,7 +7,8 @@ categories:
     - golang
     - time-line
 tags: [
-  "gold",
+  "gold", 
+  "one-detail"
 ]
 ---
 
