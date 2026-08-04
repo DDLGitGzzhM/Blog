@@ -1,5 +1,5 @@
 ---
-title: "热榜 detail"
+title: "打赏 detail"
 description: 我们项目实现了一个 xxxx 
 date: 2026-08-04
 slug: payment-0x01
