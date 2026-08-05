@@ -298,6 +298,16 @@ func (s *SyncWechatOrderJob) Run() error {
 
 ### 打赏设计过程
 
+### 需求分析 & 功能设计
+
+1. 用户希望能够在某篇文章的最后，有一个打赏按钮按钮
+
+ 	用户点击这个按钮，就会弹出微信的支付二维码，即 `prepay` 的过程
+
+2. 可以查看支付的结果和状态 `getStatus` 
+
+
+
 #### 表结构设计
 
 1. 文章模块 和 文章 id 
@@ -321,55 +331,156 @@ type Reward struct {
 }
 ```
 
-### 功能设计
 
-1. 创建/查询打赏请求
-2. 缓存二维码结果
-3. 监听支付结果,更新打赏状态
+#### 状态更新
 
+状态更新有两个流程 
 
-| reward 负责 | reward 不负责（交给别人） |
-|-------------|---------------------------|
-| 创建/查询打赏单 | 跟微信下单、验签回调 → **payment** |
-| 缓存二维码 | 真正加余额 → **account** |
-| 听支付结果，更新打赏状态 | 用户登录、文章内容 → **主站 webook** |
-| 支付成功后触发入账 | |
+1. 异步的消费 kafka 进行更新
+
+2. 获取detail的时候进行更新
+
+	- 这里在限流的时候，就不进行慢路径的查询。等待 kafaka 进行补充
 
 
-流程如下 : 
 
-```mermaid
-sequenceDiagram
-  participant 主站
-  participant Reward
-  participant Redis
-  participant Payment
-  participant Kafka
-  participant Account
+```go
+func (s *WechatNativeRewardService) GetReward(ctx context.Context, rid, uid int64) (domain.Reward, error) {
+	// 快路径
+	r, err := s.repo.GetReward(ctx, rid)
+	if err != nil {
+		return domain.Reward{}, err
+	}
+	if r.Uid != uid {
+		// 说明是非法查询
+		return domain.Reward{}, errors.New("查询的打赏记录和打赏人对不上")
+	}
 
-  Note over 主站,Account: 线1：用户点打赏
-  主站->>Reward: PreReward
-  Reward->>Redis: 有没有缓存的二维码？
-  alt 有缓存
-    Redis-->>Reward: code_url
-  else 没有
-    Reward->>Reward: 写打赏单 Init
-    Reward->>Payment: NativePrePay(reward-{rid})
-    Payment-->>Reward: code_url
-    Reward->>Redis: 缓存二维码 29分钟
-  end
-  Reward-->>主站: codeURL + rid
+	// 有可能，我的打赏记录，还是 Init 状态
+	// 已经是完结状态
+	if r.Completed() || ctx.Value("limited") == "true" {
+		// 我已经知道你的支付结果了
+		return r, nil
+	}
 
-  Note over 主站,Account: 线2：支付有结果了（异步）
-  Kafka->>Reward: payment_events
-  Reward->>Reward: UpdateReward
-  Reward->>Account: Credit（成功才入账）
+	// 这个时候，考虑到支付到查询结果，我们搞一个慢路径
+	// 你有可能支付了，但是我 reward 本身没有收到通知
+	// 我直接查询 payment，
+	// 只能解决，支付收到了，但是 reward 没收到
+	// 降级状态，限流状态，熔断状态，不要走慢路径
+	resp, err := s.client.GetPayment(ctx, &pmtv1.GetPaymentRequest{
+		BizTradeNo: s.bizTradeNO(r.Id),
+	})
+	if err != nil {
+		// 这边我们直接返回从数据库查询的数据
+		s.l.Error("慢路径查询支付结果失败",
+			logger.Int64("rid", r.Id), logger.Error(err.Error()))
+		return r, nil
+	}
+	// 更新状态
+	switch resp.Status {
+	case pmtv1.PaymentStatus_PaymentStatusFailed:
+		r.Status = domain.RewardStatusFailed
+	case pmtv1.PaymentStatus_PaymentStatusInit:
+		r.Status = domain.RewardStatusInit
+	case pmtv1.PaymentStatus_PaymentStatusSuccess:
+		r.Status = domain.RewardStatusPayed
+	case pmtv1.PaymentStatus_PaymentStatusRefund:
+		// 理论上来说不可能出现这个，直接设置为失败
+		r.Status = domain.RewardStatusFailed
+	}
+	err = s.repo.UpdateStatus(ctx, rid, r.Status)
+	if err != nil {
+		s.l.Error("更新本地打赏状态失败",
+			logger.Int64("rid", r.Id), logger.Error(err.Error()))
+		return r, nil
+	}
+	return r, nil
+}
 ```
 
----
+
+### 对账模块设计
+
+1. 对于每一条付款记录，我们都维护到 用户余额里面并且记录一笔流水
+
+```go
+func (s *WechatNativeRewardService) UpdateReward(ctx context.Context,
+	bizTradeNO string, status domain.RewardStatus) error {
+	rid := s.toRid(bizTradeNO)
+	err := s.repo.UpdateStatus(ctx, rid, status)
+	if err != nil {
+		return err
+	}
+	// 完成了支付，准备入账
+	if status == domain.RewardStatusPayed {
+		r, err := s.repo.GetReward(ctx, rid)
+		if err != nil {
+			return err
+		}
+		// webook 抽成
+		weAmt := int64(float64(r.Amt) * 0.1)
+		_, err = s.acli.Credit(ctx, &accountv1.CreditRequest{
+			Biz:   "reward",
+			BizId: rid,
+			Items: []*accountv1.CreditItem{
+				{
+					AccountType: accountv1.AccountType_AccountTypeReward,
+					// 虽然可能为 0，但是也要记录出来
+					Amt:      weAmt,
+					Currency: "CNY",
+				},
+				{
+					Account:     r.Uid,
+					Uid:         r.Uid,
+					AccountType: accountv1.AccountType_AccountTypeReward,
+					Amt:         r.Amt - weAmt,
+					Currency:    "CNY",
+				},
+			},
+		})
+		if err != nil {
+			s.l.Error("入账失败了，快来修数据啊！！！",
+				logger.String("biz_trade_no", bizTradeNO),
+				logger.Error(err.Error()))
+			// 做好监控和告警，这里
+			return err
+		}
+	}
+	return nil
+}
+```
+
+### 表结构设计
 
 
+```g
 
+// Account 账号本体
+type Account struct {
+	Id int64 `gorm:"primaryKey,autoIncrement" bson:"id,omitempty"`
+	// 对应的用户的 ID，如果是系统账号
+	Uid int64 `gorm:"uniqueIndex:account_uid"`
+	// 账号 ID，这个才是对外使用的
+	Account int64 `gorm:"uniqueIndex:account_uid"`
+	// 一个人可能有很多账号，你在这里可以用于区分
+	Type uint8 `gorm:"uniqueIndex:account_uid"`
+
+	// 账号本身可以有很多额外的字段
+	// 例如跟会计有关的，跟税务有关的，跟洗钱有关的
+	// 跟审计有关的，跟安全有关的
+
+	// 可用余额
+	// 一般来说，一种货币就一个账号，比较好处理（个人认为）
+	// 有些一个账号，但是支持多种货币，那么就需要关联另外一张表。
+	// 记录每一个币种的余额
+	Balance  int64
+	Currency string
+
+	Ctime int64
+	Utime int64
+}
+```
 
 ## 面试
 
@@ -382,3 +493,21 @@ sequenceDiagram
 4. 怎么防止重复支付？ 
 
 5. 如果微信支付的回调处理失败怎么办 ？
+
+---
+
+1. 如何保证消息一定发出去？ 怎么确保一定发送了数据？如何确保消息不丢失 ？ 
+
+2. 怎么保证消息丢有序性 ？？
+
+	- 如果 topic 增加分区，怎么保证有序性？ 
+	- 如果保证消息有序性，消息积压了，怎么半？ 
+		- 开goroutine 批量提交
+
+3. 如果在自己业务里面，有明显的部分失败的场景，怎么补偿
+
+4. 怎么保证幂等？ 你有什么方案 ？  能不能撑住高并发
+
+	- 唯一索引处理
+	- 二话不说先插入一个数据，保证坐在一个本地事务里面，如果有冲突那么就说明做过了
+	- 不拢过滤器去重
