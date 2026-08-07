@@ -1,8 +1,8 @@
 ---
 title: "[LeetCode][hot100] 滑动窗口"
 description:  滑动窗口
-date: 2025-08-07
-slug: leetcode-slide-window
+date: 2026-08-07
+slug: leetcode-slide-window-0x01
 image: img.png
 categories:
     - algorithm
