@@ -1,8 +1,8 @@
 ---
-title: "用户模块"
+title: "AI helper 常规开发"
 description: RAG 代码召回
 date: 2026-08-08
-slug: ai-helper-rest-login-0x01
+slug: ai-helper-rest--0x01
 categories:
     - golang
     - time-line
