@@ -228,3 +228,143 @@ public:
 
 [课程表](https://leetcode.cn/problems/course-schedule/description/?envType=study-plan-v2&envId=top-100-liked)
 
+思路 :
+
+1. 主要考察的是拓扑排序 
+
+拓扑排序我们的方法是
+
+ 1. 查找所有入度为0的点进去队列，然后减少其关联的点
+
+ 2. 然后再重新入所有入度为0的点
+
+```go
+const int N = 4e3 + 10 ;
+
+int h[N] , e[N], ne[N], idx;
+
+int d[N] ;
+
+int num ;
+ 
+ 
+void init(){
+    memset(h,-1,sizeof(h));
+    memset(e,0,sizeof(e));
+    memset(ne,0,sizeof(ne));
+    memset(d,0,sizeof(d));
+    idx = 0 ;
+    num = 0 ;
+}
+
+// a -> b 
+void add(int a,int b) {
+    e[idx] = b;
+    ne[idx] = h[a];
+    h[a] = idx ++ ;
+}
+
+bool topsort() {
+    int cnt = 0 ;
+    queue<int> q;
+    for(int i = 0;  i < num ; i ++ ) {
+        if(!d[i]) q.push(i);
+    }
+
+    while(!q.empty()) {
+        int t = q.front() ;
+        q.pop () ;
+        cnt ++ ;
+        for(int i = h[t] ; i!= -1 ; i = ne[i]) {
+            int j = e[i] ;
+            d[j] -- ;
+            if(!d[j]) q.push(j);
+        }
+    }
+    return cnt == num; 
+}
+
+
+class Solution {
+public:
+    bool canFinish(int numCourses, vector<vector<int>>& prerequisites) {
+        init(); 
+        num = numCourses ; 
+
+        for(auto x : prerequisites) {
+            int a = x[0];
+            int b = x[1];
+            add(a,b);
+            d[b] ++ ;
+        }
+
+        return topsort();
+    }
+};
+```
+
+
+
+## 208. 实现 Trie (前缀树)
+
+[实现 Trie (前缀树)](https://leetcode.cn/problems/implement-trie-prefix-tree/description/?envType=study-plan-v2&envId=top-100-liked)
+
+Tire 的实现思路
+
+1. 定义 son[p][u] ; 表示第 p 层节点是否有值 u 
+
+2. 然后再进行顺序即可
+
+```cpp
+class Trie {
+static const int N = 4e4 + 10 ;
+int son[N][26];
+int idx ;
+bool isEnd[N];
+
+public:
+    Trie() {
+        memset(son,0,sizeof(son));
+        memset(isEnd,0,sizeof(isEnd));
+        idx = 0 ;
+    }   
+    
+    void insert(string word) {
+        int p = 0 ;
+        for(auto x : word) {
+            int u = x-'a';
+            if(!son[p][u]) son[p][u] = ++idx; 
+            p = son[p][u];
+        }
+        isEnd[p] = 1; 
+    }
+    
+    bool search(string word) {
+        int p = 0 ;
+        for(auto x : word) {
+            int u = x-'a';
+            if(son[p][u]) p = son[p][u];
+            else return false;
+        }
+        return isEnd[p];
+    }
+    
+    bool startsWith(string prefix) {
+        int p = 0 ;
+        for(auto x : prefix) {
+            int u = x-'a';
+            if(son[p][u]) p = son[p][u];
+            else return false;
+        }
+        return p ; 
+    }
+};
+
+/**
+ * Your Trie object will be instantiated and called as such:
+ * Trie* obj = new Trie();
+ * obj->insert(word);
+ * bool param_2 = obj->search(word);
+ * bool param_3 = obj->startsWith(prefix);
+ */
+```
